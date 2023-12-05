@@ -23,6 +23,6 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore ./LANCacheApp/LanCacheApp.csproj
     - name: Build
-      run: dotnet build ./LANCacheApp --no-restore
+      run: dotnet build ./LANCacheApp
     - name: Test
       run: dotnet test --no-build --verbosity normal
