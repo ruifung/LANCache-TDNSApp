@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
@@ -37,6 +38,7 @@ namespace LanCache
         private DnsNSRecordData NsRecord = null!;
         private string CacheDomainsCacheFile = null!;
         private string WildcardDomainsCacheFile = null!;
+        private IReadOnlySet<IPAddress> ignoredClientAddresses = new HashSet<IPAddress>();
         
         #endregion
 
@@ -211,6 +213,53 @@ namespace LanCache
             await UpdateLanCacheDomains();
         }
 
+        private async Task PrepareIgnoredClientsSet()
+        {
+            var addressSet = Config.GlobalCacheAddresses
+                .Concat(Config.CacheAddresses.Values.SelectMany(cacheAddressesValue => cacheAddressesValue))
+                .Concat(Config.IgnoreClientAddresses)
+                .Where(addr => addr != DUMMY_LANCACHE_ADDRESS)
+                .ToHashSet();
+
+            var ipSet = new HashSet<IPAddress>();
+            foreach (var addr in addressSet)
+            {
+                var isIp = IPAddress.TryParse(addr, out var ipAddress);
+                if (isIp && ipAddress?.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
+                {
+                    ipSet.Add(ipAddress);
+                }
+                else
+                {
+                    try
+                    {
+                        var v4Result =
+                            await DnsServer.ResolveAsync(new DnsQuestionRecord(addr, DnsResourceRecordType.A,
+                                DnsClass.IN));
+                        var v6Result =
+                            await DnsServer.ResolveAsync(new DnsQuestionRecord(addr, DnsResourceRecordType.A,
+                                DnsClass.IN));
+                        foreach (var dnsResourceRecord in v4Result.Answer.Where(ans => ans.Type is DnsResourceRecordType.A))
+                        {
+                            var ip = ((DnsARecordData)dnsResourceRecord.RDATA).Address;
+                            ipSet.Add(ip);
+                        }
+                        foreach (var dnsResourceRecord in v6Result.Answer.Where(ans => ans.Type is DnsResourceRecordType.AAAA))
+                        {
+                            var ip = ((DnsAAAARecordData)dnsResourceRecord.RDATA).Address;
+                            ipSet.Add(ip);
+                        }
+                    }
+                    catch (DnsClientException)
+                    {
+                        DnsServer.WriteLog($"Unable to resolve target domain: {addr}");
+                    }
+                }
+            }
+
+            ignoredClientAddresses = ipSet;
+        }
+
         #endregion
         
         #region public
@@ -226,6 +275,7 @@ namespace LanCache
             SoaRecord = new DnsSOARecordData(DnsServer.ServerDomain, "hostadmin@" + DnsServer.ServerDomain, 1, 14400, 3600, 604800, 60);
             NsRecord = new DnsNSRecordData(DnsServer.ServerDomain);
             Config = await LoadOrInitializeConfig(dnsServer, config);
+            await PrepareIgnoredClientsSet();
             DomainsUpdateTimer = new Timer(DomainsUpdateTimerCallback, null, Timeout.Infinite, Timeout.Infinite);
             DomainsUpdateTimer.Change(TimeSpan.FromHours(Config.DomainsUpdatePeriodHours),
                 TimeSpan.FromHours(Config.DomainsUpdatePeriodHours));
@@ -235,7 +285,7 @@ namespace LanCache
         public Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEp, DnsTransportProtocol protocol,
             bool isRecursionAllowed)
         {
-            if (!Config.LanCacheEnabled)
+            if (!Config.LanCacheEnabled || ignoredClientAddresses.Contains(remoteEp.Address))
             {
                 return Task.FromResult<DnsDatagram>(null!);
             }
@@ -390,7 +440,8 @@ namespace LanCache
         public string DomainsDataUrl { get; set; } = "";
         public string DomainsDataPathPrefix { get; set; } = "";
         public int DomainsUpdatePeriodHours { get; set; }
-        
+
+        public List<string> IgnoreClientAddresses { get; set; } = new();
         public List<string> GlobalCacheAddresses { get; set; } = new();
         public Dictionary<string, List<string>> CacheAddresses { get; set; } = new();
     }
