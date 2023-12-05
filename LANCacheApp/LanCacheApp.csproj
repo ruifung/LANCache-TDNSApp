@@ -19,16 +19,9 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\TechnitiumLibrary\TechnitiumLibrary\TechnitiumLibrary.csproj" />
+      <ProjectReference Include="..\TechnitiumLibrary\TechnitiumLibrary.Net\TechnitiumLibrary.Net.csproj" />
       <ProjectReference Include="..\DnsServer\DnsServerCore.ApplicationCommon\DnsServerCore.ApplicationCommon.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Reference Include="TechnitiumLibrary">
-        <HintPath>..\TechnitiumLibrary\bin\TechnitiumLibrary.dll</HintPath>
-      </Reference>
-      <Reference Include="TechnitiumLibrary.Net">
-        <HintPath>..\TechnitiumLibrary\bin\TechnitiumLibrary.Net.dll</HintPath>
-      </Reference>
     </ItemGroup>
 
     <ItemGroup>
