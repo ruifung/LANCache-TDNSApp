@@ -21,14 +21,29 @@ jobs:
       with:
         dotnet-version: 7.0.x
     - name: Build TechnitiumLibrary
-      run: dotnet build ./TechnitiumLibrary/TechnitiumLibrary -c Release
+      working-directory: ./TechnitiumLibrary
+      run: dotnet build ./TechnitiumLibrary -c Release
     - name: Build TechnitiumLibrary.Net
-      run: dotnet build ./TechnitiumLibrary/TechnitiumLibrary.Net -c Release
+      working-directory: ./TechnitiumLibrary
+      run: dotnet build ./TechnitiumLibrary.Net -c Release
     - name: Build DnsServerCore.ApplicationCommon
-      run: dotnet build ./DnsServer/DnsServerCore.ApplicationCommon
+      working-directory: ./DnsServer
+      run: dotnet build ./DnsServerCore.ApplicationCommon
     - name: Restore dependencies
-      run: dotnet restore ./LANCacheApp/LanCacheApp.csproj      
+      working-directory: ./LANCacheApp
+      run: dotnet restore
     - name: Build LANCacheApp
-      run: dotnet build ./LANCacheApp --no-restore
+      working-directory: ./LANCacheApp
+      run: dotnet build --no-restore
     - name: Test
+      working-directory: ./LANCacheApp
       run: dotnet test --no-build --verbosity normal
+    - uses: vimtor/action-zip@v1.1
+      with:
+        files: ./LANCacheApp/bin/Release/
+        dest: LANCacheApp.zip
+    - name: Upload Package ZIP Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: package-zip
+        path: LANCacheApp.zip
