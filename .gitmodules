@@ -1,0 +1,6 @@
+[submodule "TechnitiumLibrary"]
+	path = TechnitiumLibrary
+	url = https://github.com/TechnitiumSoftware/TechnitiumLibrary.git
+[submodule "DnsServer"]
+	path = DnsServer
+	url = https://github.com/TechnitiumSoftware/DnsServer.git
