@@ -37,12 +37,9 @@ jobs:
       run: dotnet test --no-build --verbosity normal
     - name: List Release Files
       run: ls LANCacheApp/bin/Release/
-    - uses: vimtor/action-zip@v1.1
-      with:
-        files: LANCacheApp/bin/Release/
-        dest: LANCacheApp.zip
-    - name: Upload Package ZIP Artifact
+    - name: Upload Build Artifacts
       uses: actions/upload-artifact@v3
       with:
         name: lancache-tdns-app
-        path: LANCacheApp.zip
+        path: LANCacheApp/bin/Release/
+        if-no-files-found: error
