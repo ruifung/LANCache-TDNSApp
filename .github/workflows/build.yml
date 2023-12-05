@@ -20,9 +20,6 @@ jobs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: 7.0.x
-    - name: Build TechnitiumLibrary
-      working-directory: ./TechnitiumLibrary
-      run: dotnet build ./TechnitiumLibrary -c Release
     - name: Build TechnitiumLibrary.Net
       working-directory: ./TechnitiumLibrary
       run: dotnet build ./TechnitiumLibrary.Net -c Release
@@ -34,16 +31,18 @@ jobs:
       run: dotnet restore
     - name: Build LANCacheApp
       working-directory: ./LANCacheApp
-      run: dotnet build --no-restore
+      run: dotnet build --no-restore -c Release
     - name: Test
       working-directory: ./LANCacheApp
       run: dotnet test --no-build --verbosity normal
+    - name: List Release Files
+      run: ls LANCacheApp/bin/Release/
     - uses: vimtor/action-zip@v1.1
       with:
-        files: ./LANCacheApp/bin/Release/
+        files: LANCacheApp/bin/Release/
         dest: LANCacheApp.zip
     - name: Upload Package ZIP Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: package-zip
+        name: lancache-tdns-app
         path: LANCacheApp.zip

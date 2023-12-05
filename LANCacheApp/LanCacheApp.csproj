@@ -19,9 +19,19 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\TechnitiumLibrary\TechnitiumLibrary\TechnitiumLibrary.csproj" />
-      <ProjectReference Include="..\TechnitiumLibrary\TechnitiumLibrary.Net\TechnitiumLibrary.Net.csproj" />
-      <ProjectReference Include="..\DnsServer\DnsServerCore.ApplicationCommon\DnsServerCore.ApplicationCommon.csproj" />
+        <ProjectReference Include="..\TechnitiumLibrary\TechnitiumLibrary.Net\TechnitiumLibrary.Net.csproj" PrivateAssets="all">
+            <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+            <Private>false</Private>
+            <ExcludeAssets>all</ExcludeAssets>
+        </ProjectReference>
+        <ProjectReference Include="..\DnsServer\DnsServerCore.ApplicationCommon\DnsServerCore.ApplicationCommon.csproj" PrivateAssets="all">
+            <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+            <Private>false</Private>
+            <ExcludeAssets>all</ExcludeAssets>
+        </ProjectReference>
+    </ItemGroup>
+
+    <ItemGroup>
     </ItemGroup>
 
     <ItemGroup>
@@ -29,5 +39,8 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
-    
+
+    <ItemDefinitionGroup>
+        <PackageReference ExcludeAssets="runtime" />
+    </ItemDefinitionGroup>
 </Project>
