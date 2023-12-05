@@ -20,9 +20,15 @@ jobs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: 7.0.x
+    - name: Build TechnitiumLibrary
+      run: dotnet build ./TechnitiumLibrary/TechnitiumLibrary
+    - name: Build TechnitiumLibrary.Net
+      run: dotnet build ./TechnitiumLibrary/TechnitiumLibrary.Net
+    - name: Build DnsServerCore.ApplicationCommon
+      run: dotnet build ./DnsServer/DnsServerCore.ApplicationCommon
     - name: Restore dependencies
-      run: dotnet restore ./LANCacheApp/LanCacheApp.csproj
-    - name: Build
-      run: dotnet build ./LANCacheApp
+      run: dotnet restore ./LANCacheApp/LanCacheApp.csproj      
+    - name: Build LANCacheApp
+      run: dotnet build ./LANCacheApp --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
