@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
@@ -16,6 +15,7 @@ using System.Threading.Tasks;
 using DnsServerCore.ApplicationCommon;
 using TechnitiumLibrary.Net.Dns;
 using TechnitiumLibrary.Net.Dns.ResourceRecords;
+using TechnitiumLibrary.Net.Http.Client;
 
 namespace LanCache
 {
@@ -79,7 +79,11 @@ namespace LanCache
             }
             
             DnsServer.WriteLog("Updating cache domains.");
-            using var hc = new HttpClient();
+            SocketsHttpHandler handler = new SocketsHttpHandler();
+            handler.Proxy = DnsServer.Proxy;
+            handler.UseProxy = DnsServer.Proxy is not null;
+            handler.AutomaticDecompression = DecompressionMethods.All;
+            using var hc = new HttpClient(new HttpClientNetworkHandler(handler, DnsServer.PreferIPv6 ? HttpClientNetworkType.PreferIPv6 : HttpClientNetworkType.Default, DnsServer));
             var domainsZipFile = Path.Combine(DnsServer.ApplicationFolder, "lancache-domains.zip");
             try
             {
