@@ -44,6 +44,14 @@ namespace LanCache
 
         #region private
 
+        private void WriteDebugLog(string message)
+        {
+            if (Config.EnableDebugLogging)
+            {
+                DnsServer.WriteLog(message);
+            }
+        }
+        
         private async Task LoadCachedDomainsData()
         {
             if (File.Exists(CacheDomainsCacheFile))
@@ -279,6 +287,11 @@ namespace LanCache
             SoaRecord = new DnsSOARecordData(DnsServer.ServerDomain, "hostadmin@" + DnsServer.ServerDomain, 1, 14400, 3600, 604800, 60);
             NsRecord = new DnsNSRecordData(DnsServer.ServerDomain);
             Config = await LoadOrInitializeConfig(dnsServer, config);
+            WriteDebugLog("Global Cache Addresses: " + string.Join(", ", Config.GlobalCacheAddresses));
+            foreach (var cacheOverride in Config.CacheAddresses)
+            {
+                WriteDebugLog($"{cacheOverride.Key} Cache Addresses: " + string.Join(", ", cacheOverride.Value));
+            }
             await PrepareIgnoredClientsSet();
             DomainsUpdateTimer = new Timer(DomainsUpdateTimerCallback, null, Timeout.Infinite, Timeout.Infinite);
             DomainsUpdateTimer.Change(TimeSpan.FromHours(Config.DomainsUpdatePeriodHours),
@@ -286,8 +299,12 @@ namespace LanCache
             await UpdateLanCacheDomains();
         }
 
-        public Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEp, DnsTransportProtocol protocol,
-            bool isRecursionAllowed)
+        public Task<bool> IsAllowedAsync(DnsDatagram request, IPEndPoint remoteEP)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEp, DnsTransportProtocol protocol, bool isRecursionAllowed)
         {
             if (!Config.LanCacheEnabled || ignoredClientAddresses.Contains(remoteEp.Address))
             {
@@ -303,7 +320,8 @@ namespace LanCache
             {
                 return Task.FromResult<DnsDatagram>(null!);
             }
-
+            
+            WriteDebugLog("Resolving cache target for cache: " + cacheTarget);
             List<string>? cacheTargets;
             var hasOverride = Config.CacheAddresses.TryGetValue(cacheTarget, out cacheTargets);
             if (!hasOverride || cacheTargets == null)
@@ -311,10 +329,10 @@ namespace LanCache
                 cacheTargets = Config.GlobalCacheAddresses;
             }
 
+            WriteDebugLog("Resolved cache targets: " + string.Join(", ", cacheTargets));
             var aRecords = new List<DnsResourceRecord>();
             var aaaaRecords = new List<DnsResourceRecord>();
             DnsResourceRecord? cnameRecord = null;
-            
             foreach (var target in cacheTargets.Where(t => t != DUMMY_LANCACHE_ADDRESS))
             {
                 var isIpAddress = IPAddress.TryParse(target, out var ipAddress);
@@ -323,10 +341,12 @@ namespace LanCache
                     switch (ipAddress?.AddressFamily)
                     {
                         case AddressFamily.InterNetwork:
+                            WriteDebugLog("Creating A record");
                             aRecords.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.A,
                                 question.Class, 60, new DnsARecordData(ipAddress)));
                             break;
                         case AddressFamily.InterNetworkV6:
+                            WriteDebugLog("Creating AAAA record");
                             aaaaRecords.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.AAAA,
                                 question.Class, 60, new DnsAAAARecordData(ipAddress)));
                             break;
@@ -339,10 +359,11 @@ namespace LanCache
                 {
                     try
                     {
-                        // Use ANAME because it's probably the most transparent to the end client. Just in case.
+                        WriteDebugLog("Creating CNAME record");
                         cnameRecord = new DnsResourceRecord(question.Name, DnsResourceRecordType.ANAME, question.Class,
                             60,
-                            new DnsANAMERecordData(target));
+                            new DnsCNAMERecordData(target));
+                        
                     }
                     catch (DnsClientException)
                     {
@@ -356,48 +377,48 @@ namespace LanCache
             var domainZone = foundZone ?? question.Name;
             
             // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
+            WriteDebugLog("Cache QTYPE: " + question.Type);
             switch (question.Type)
             {
                 case DnsResourceRecordType.A:
                     if (cnameRecord != null)
+                    {
+                        WriteDebugLog("Adding CNAME record to answer");
                         answers.Add(cnameRecord);
+                    }
                     else
+                    {
+                        WriteDebugLog("Adding A records to answer");
                         answers.AddRange(aRecords);
+                    }
                     break;
                 case DnsResourceRecordType.AAAA:
                     if (cnameRecord != null)
+                    {
+                        WriteDebugLog("Adding CNAME record to answer");
                         answers.Add(cnameRecord);
+                    }
                     else
+                    {
+                        WriteDebugLog("Adding AAAA records to answer");
                         answers.AddRange(aaaaRecords);
-                    break;
-                case DnsResourceRecordType.NS:
-                    if (question.Name.Equals(domainZone, StringComparison.OrdinalIgnoreCase))
-                    {
-                        answers.Add(new DnsResourceRecord(domainZone, DnsResourceRecordType.NS, question.Class, 60, NsRecord));
                     }
-                    else
-                    {
-                        authority.Add(new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, 60, SoaRecord));
-                    }
-                    break;
-                case DnsResourceRecordType.SOA:
-                    answers.Add(new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, 60, SoaRecord));
-                    break;
-                default:
-                    authority.Add(new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, 60, SoaRecord));
                     break;
             }
 
             // No valid cache targets found, handle normally to not break the cached urls.
-            if (answers.Count != 0)
+            if (answers.Count > 0)
             {
-                return Task.FromResult(new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false,
-                    request.RecursionDesired, false, false, false, DnsResponseCode.NoError, request.Question, answers,
-                    authority, null,
-                    request.EDNS is null ? ushort.MinValue : DnsServer.UdpPayloadSize));
+                WriteDebugLog($"Returning DNSDatagram with {answers.Count} answers");
+                return Task.FromResult(new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
+                    request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, answers));
             }
 
-            DnsServer.WriteLog("No valid targets found for cache: " + cacheTarget);
+            if (question.Type is DnsResourceRecordType.A or DnsResourceRecordType.AAAA)
+            {
+                DnsServer.WriteLog("No valid targets found for cache: " + cacheTarget);
+            }
+
             return Task.FromResult<DnsDatagram>(null!);
         }
         
@@ -441,6 +462,7 @@ namespace LanCache
     internal class AppConfig
     {
         public required bool LanCacheEnabled { get; set; }
+        public bool EnableDebugLogging { get; set; }
         public string DomainsDataUrl { get; set; } = "";
         public string DomainsDataPathPrefix { get; set; } = "";
         public int DomainsUpdatePeriodHours { get; set; }
