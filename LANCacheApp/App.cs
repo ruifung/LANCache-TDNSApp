@@ -320,21 +320,32 @@ namespace LanCache
             {
                 return null!;
             }
-            
-            WriteDebugLog("Resolving cache target for cache: " + cacheTarget);
-            List<string>? cacheTargets;
-            var hasOverride = Config.CacheAddresses.TryGetValue(cacheTarget, out cacheTargets);
-            if (!hasOverride || cacheTargets == null)
+
+            // Skip processing if the enabled cache whitelist is set, and the cache isn't enabled.
+            if (Config.EnabledCaches.Count > 0 && !Config.EnabledCaches.Contains(cacheTarget))
             {
-                cacheTargets = Config.GlobalCacheAddresses;
+                return null!;
+            }
+            
+            // Skip processing if the disabled cache blacklist is set, and the cache is disabled.
+            if (Config.DisabledCaches.Count > 0 && Config.DisabledCaches.Contains(cacheTarget))
+            {
+                return null!;
+            }
+            
+            WriteDebugLog("Resolving cache addresses for cache: " + cacheTarget);
+            var hasOverride = Config.CacheAddresses.TryGetValue(cacheTarget, out var cacheAddresses);
+            if (!hasOverride || cacheAddresses == null)
+            {
+                cacheAddresses = Config.GlobalCacheAddresses;
             }
 
-            WriteDebugLog("Resolved cache targets: " + string.Join(", ", cacheTargets));
+            WriteDebugLog("Resolved cache addresses: " + string.Join(", ", cacheAddresses));
             var answers = new List<DnsResourceRecord>();
             var authority = new List<DnsResourceRecord>();
             var domainZone = foundZone ?? question.Name;
             
-            foreach (var target in cacheTargets.Where(t => t != DUMMY_LANCACHE_ADDRESS))
+            foreach (var target in cacheAddresses.Where(t => t != DUMMY_LANCACHE_ADDRESS))
             {
                 var isIpAddress = IPAddress.TryParse(target, out var ipAddress);
                 if (isIpAddress)
@@ -448,9 +459,11 @@ namespace LanCache
         public string DomainsDataUrl { get; set; } = "";
         public string DomainsDataPathPrefix { get; set; } = "";
         public int DomainsUpdatePeriodHours { get; set; }
-
+        
         public List<string> IgnoreClientAddresses { get; set; } = new();
         public List<string> GlobalCacheAddresses { get; set; } = new();
+        public List<string> EnabledCaches { get; set; } = new();
+        public List<string> DisabledCaches { get; set; } = new();
         public Dictionary<string, List<string>> CacheAddresses { get; set; } = new();
     }
 
