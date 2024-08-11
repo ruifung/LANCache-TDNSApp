@@ -304,11 +304,11 @@ namespace LanCache
             return Task.FromResult(false);
         }
 
-        public Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEp, DnsTransportProtocol protocol, bool isRecursionAllowed)
+        public async Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEp, DnsTransportProtocol protocol, bool isRecursionAllowed)
         {
             if (!Config.LanCacheEnabled || ignoredClientAddresses.Contains(remoteEp.Address))
             {
-                return Task.FromResult<DnsDatagram>(null!);
+                return null!;
             }
             
             var question = request.Question[0];
@@ -318,7 +318,7 @@ namespace LanCache
 
             if ((!foundDirect && !foundWild) || cacheTarget == null)
             {
-                return Task.FromResult<DnsDatagram>(null!);
+                return null!;
             }
             
             WriteDebugLog("Resolving cache target for cache: " + cacheTarget);
@@ -330,25 +330,34 @@ namespace LanCache
             }
 
             WriteDebugLog("Resolved cache targets: " + string.Join(", ", cacheTargets));
-            var aRecords = new List<DnsResourceRecord>();
-            var aaaaRecords = new List<DnsResourceRecord>();
-            DnsResourceRecord? cnameRecord = null;
+            var answers = new List<DnsResourceRecord>();
+            var authority = new List<DnsResourceRecord>();
+            var domainZone = foundZone ?? question.Name;
+            
             foreach (var target in cacheTargets.Where(t => t != DUMMY_LANCACHE_ADDRESS))
             {
                 var isIpAddress = IPAddress.TryParse(target, out var ipAddress);
                 if (isIpAddress)
                 {
+                    // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
                     switch (ipAddress?.AddressFamily)
                     {
                         case AddressFamily.InterNetwork:
-                            WriteDebugLog("Creating A record");
-                            aRecords.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.A,
-                                question.Class, 60, new DnsARecordData(ipAddress)));
+                            if (question.Type == DnsResourceRecordType.A)
+                            {
+                                WriteDebugLog("Creating A record");
+                                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.A,
+                                    question.Class, 60, new DnsARecordData(ipAddress)));
+                            }
                             break;
                         case AddressFamily.InterNetworkV6:
-                            WriteDebugLog("Creating AAAA record");
-                            aaaaRecords.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.AAAA,
-                                question.Class, 60, new DnsAAAARecordData(ipAddress)));
+                            if (question.Type == DnsResourceRecordType.AAAA)
+                            {
+                                WriteDebugLog("Creating AAAA record");
+                                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.AAAA,
+                                    question.Class, 60, new DnsAAAARecordData(ipAddress)));
+                            }
+
                             break;
                         default:
                             DnsServer.WriteLog("Found non v4/v6 IP address somehow: " + target);
@@ -360,10 +369,15 @@ namespace LanCache
                     try
                     {
                         WriteDebugLog("Creating CNAME record");
-                        cnameRecord = new DnsResourceRecord(question.Name, DnsResourceRecordType.ANAME, question.Class,
+                        answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.CNAME, question.Class,
                             60,
-                            new DnsCNAMERecordData(target));
-                        
+                            new DnsCNAMERecordData(target)));
+                        var newQuestion = new DnsQuestionRecord(target, question.Type, question.Class);
+                        var newResponse = await DnsServer.DirectQueryAsync(newQuestion);
+                        if (newResponse.RCODE is DnsResponseCode.NoError)
+                            answers.AddRange(newResponse.Answer);
+                        else
+                            DnsServer.WriteLog($"Error querying cache target {target} for QTYPE {question.Type} with RCODE {newResponse.RCODE}");
                     }
                     catch (DnsClientException)
                     {
@@ -371,47 +385,15 @@ namespace LanCache
                     }
                 }
             }
-
-            var answers = new List<DnsResourceRecord>();
-            var authority = new List<DnsResourceRecord>();
-            var domainZone = foundZone ?? question.Name;
             
-            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
             WriteDebugLog("Cache QTYPE: " + question.Type);
-            switch (question.Type)
-            {
-                case DnsResourceRecordType.A:
-                    if (cnameRecord != null)
-                    {
-                        WriteDebugLog("Adding CNAME record to answer");
-                        answers.Add(cnameRecord);
-                    }
-                    else
-                    {
-                        WriteDebugLog("Adding A records to answer");
-                        answers.AddRange(aRecords);
-                    }
-                    break;
-                case DnsResourceRecordType.AAAA:
-                    if (cnameRecord != null)
-                    {
-                        WriteDebugLog("Adding CNAME record to answer");
-                        answers.Add(cnameRecord);
-                    }
-                    else
-                    {
-                        WriteDebugLog("Adding AAAA records to answer");
-                        answers.AddRange(aaaaRecords);
-                    }
-                    break;
-            }
 
             // No valid cache targets found, handle normally to not break the cached urls.
             if (answers.Count > 0)
             {
                 WriteDebugLog($"Returning DNSDatagram with {answers.Count} answers");
-                return Task.FromResult(new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
-                    request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, answers));
+                return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
+                    request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, answers, new []{new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, 60, SoaRecord)});
             }
 
             if (question.Type is DnsResourceRecordType.A or DnsResourceRecordType.AAAA)
@@ -419,7 +401,7 @@ namespace LanCache
                 DnsServer.WriteLog("No valid targets found for cache: " + cacheTarget);
             }
 
-            return Task.FromResult<DnsDatagram>(null!);
+            return null!;
         }
         
         private static string? GetParentZone(string domain)
