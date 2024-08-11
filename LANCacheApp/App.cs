@@ -345,9 +345,9 @@ namespace LanCache
             var authority = new List<DnsResourceRecord>();
             var domainZone = foundZone ?? question.Name;
             
-            foreach (var target in cacheAddresses.Where(t => t != DUMMY_LANCACHE_ADDRESS))
+            foreach (var cacheAddress in cacheAddresses.Where(t => t != DUMMY_LANCACHE_ADDRESS))
             {
-                var isIpAddress = IPAddress.TryParse(target, out var ipAddress);
+                var isIpAddress = IPAddress.TryParse(cacheAddress, out var ipAddress);
                 if (isIpAddress)
                 {
                     // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
@@ -371,7 +371,7 @@ namespace LanCache
 
                             break;
                         default:
-                            DnsServer.WriteLog("Found non v4/v6 IP address somehow: " + target);
+                            DnsServer.WriteLog("Found non v4/v6 IP address somehow: " + cacheAddress);
                             break;
                     }
                 }
@@ -382,17 +382,17 @@ namespace LanCache
                         WriteDebugLog("Creating CNAME record");
                         answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.CNAME, question.Class,
                             60,
-                            new DnsCNAMERecordData(target)));
-                        var newQuestion = new DnsQuestionRecord(target, question.Type, question.Class);
+                            new DnsCNAMERecordData(cacheAddress)));
+                        var newQuestion = new DnsQuestionRecord(cacheAddress, question.Type, question.Class);
                         var newResponse = await DnsServer.DirectQueryAsync(newQuestion);
                         if (newResponse.RCODE is DnsResponseCode.NoError)
                             answers.AddRange(newResponse.Answer);
                         else
-                            DnsServer.WriteLog($"Error querying cache target {target} for QTYPE {question.Type} with RCODE {newResponse.RCODE}");
+                            DnsServer.WriteLog($"Error querying cache target {cacheAddress} for QTYPE {question.Type} with RCODE {newResponse.RCODE}");
                     }
                     catch (DnsClientException)
                     {
-                        DnsServer.WriteLog("Invalid CNAME target: " + target);
+                        DnsServer.WriteLog("Invalid CNAME target: " + cacheAddress);
                     }
                 }
             }
