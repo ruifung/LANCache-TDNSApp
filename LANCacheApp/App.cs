@@ -249,7 +249,7 @@ namespace LanCache
                             await DnsServer.ResolveAsync(new DnsQuestionRecord(addr, DnsResourceRecordType.A,
                                 DnsClass.IN));
                         var v6Result =
-                            await DnsServer.ResolveAsync(new DnsQuestionRecord(addr, DnsResourceRecordType.A,
+                            await DnsServer.ResolveAsync(new DnsQuestionRecord(addr, DnsResourceRecordType.AAAA,
                                 DnsClass.IN));
                         foreach (var dnsResourceRecord in v4Result.Answer.Where(ans => ans.Type is DnsResourceRecordType.A))
                         {
