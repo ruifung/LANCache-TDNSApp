@@ -377,6 +377,11 @@ namespace LanCache
                 }
                 else
                 {
+                    if (cacheAddress == question.Name)
+                    {
+                        DnsServer.WriteLog($"Attempted to cache {cacheAddress} using itself!");
+                        return null!;
+                    }
                     try
                     {
                         WriteDebugLog("Creating CNAME record");
@@ -384,6 +389,7 @@ namespace LanCache
                             60,
                             new DnsCNAMERecordData(cacheAddress)));
                         var newQuestion = new DnsQuestionRecord(cacheAddress, question.Type, question.Class);
+                        WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
                         var newResponse = await DnsServer.DirectQueryAsync(newQuestion);
                         if (newResponse.RCODE is DnsResponseCode.NoError)
                             answers.AddRange(newResponse.Answer);
@@ -396,8 +402,6 @@ namespace LanCache
                     }
                 }
             }
-            
-            WriteDebugLog("Cache QTYPE: " + question.Type);
 
             // No valid cache targets found, handle normally to not break the cached urls.
             if (answers.Count > 0)
