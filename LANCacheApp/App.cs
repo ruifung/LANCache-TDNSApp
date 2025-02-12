@@ -310,7 +310,6 @@ namespace LanCache
             {
                 return null!;
             }
-            WriteDebugLog("Begin processing request for " + request.Question.First().Name);
             var question = request.Question[0];
             var foundDirect = IsZoneFound(LanCacheDomains, question.Name, out var foundZone, out var cacheTarget);
             // Use short-circuiting to skip the wildcard search if it matches a direct domain.
