@@ -19,7 +19,7 @@ using TechnitiumLibrary.Net.Http.Client;
 
 namespace LanCache
 {
-    public class App: IDnsApplication, IDnsAuthoritativeRequestHandler
+    public class App: IDnsApplication, IDnsRequestBlockingHandler
     {
         #region variables
 
@@ -299,18 +299,18 @@ namespace LanCache
             await UpdateLanCacheDomains();
         }
 
-        public Task<bool> IsAllowedAsync(DnsDatagram request, IPEndPoint remoteEP)
+        public Task<bool> IsAllowedAsync(DnsDatagram request, IPEndPoint remoteEp)
         {
             return Task.FromResult(false);
         }
 
-        public async Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEp, DnsTransportProtocol protocol, bool isRecursionAllowed)
+       public async Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEp)
         {
             if (!Config.LanCacheEnabled || ignoredClientAddresses.Contains(remoteEp.Address))
             {
                 return null!;
             }
-            
+            WriteDebugLog("Begin processing request for " + request.Question.First().Name);
             var question = request.Question[0];
             var foundDirect = IsZoneFound(LanCacheDomains, question.Name, out var foundZone, out var cacheTarget);
             // Use short-circuiting to skip the wildcard search if it matches a direct domain.
@@ -408,7 +408,7 @@ namespace LanCache
             {
                 WriteDebugLog($"Returning DNSDatagram with {answers.Count} answers");
                 return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
-                    request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, answers, new []{new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, 60, SoaRecord)});
+                    request.RecursionDesired, true, false, false, DnsResponseCode.NoError, request.Question, answers, new []{new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, 60, SoaRecord)});
             }
 
             if (question.Type is DnsResourceRecordType.A or DnsResourceRecordType.AAAA)
