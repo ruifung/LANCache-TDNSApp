@@ -40,7 +40,7 @@ jobs:
       working-directory: ./LANCacheApp
       run: dotnet test --no-build --verbosity normal
     - name: List Release Files
-      run: ls LANCacheApp/bin/Release/
+      run: ls LANCacheApp/bin/${{ inputs.configuration }}/
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
