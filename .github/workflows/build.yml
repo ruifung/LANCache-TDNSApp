@@ -45,5 +45,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
-        path: LANCacheApp/bin/Release/
+        path: LANCacheApp/bin/${{ inputs.configuration }}/
         if-no-files-found: error
