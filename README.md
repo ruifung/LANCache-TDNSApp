@@ -66,3 +66,21 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
   ]
 }
 ```
+
+### Example configuration (All caches enabled)
+```json
+{
+  "lanCacheEnabled": true,
+  "enableDebugLogging": false,
+  "domainsDataUrl": "https://github.com/uklans/cache-domains/archive/refs/heads/master.zip",
+  "domainsDataPathPrefix": "cache-domains-master/",
+  "domainsUpdatePeriodHours": 24,
+  "ignoreClientAddresses": [],
+  "globalCacheAddresses": [
+    "lancache.example.home.internal"
+  ],
+  "cacheAddresses": {},
+  "enabledCaches": [],
+  "disabledCaches": []
+}
+```
