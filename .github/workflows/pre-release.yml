@@ -4,30 +4,27 @@ on:
   push:
     branches: ["main"]
 
-env:
-  VERSION: ${{ github.ref_name }}.${{ github.sha }}
-
 jobs:
   call-build-workflow:
     uses: ./.github/workflows/build.yml
     with:
       configuration: Debug
-      version: ${{ env.VERSION }}
-      artifact-name: lancache-tdns-app-${{ env.VERSION }}
+      version: ${{ github.ref_name }}.${{ github.sha }}
+      artifact-name: lancache-tdns-app-${{ github.ref_name }}
   pre-release:
     name: "Pre Release"
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/download-artifact@v4"
         with:
-          name: lancache-tdns-app-${{ env.VERSION }}
+          name: lancache-tdns-app-${{ github.ref_name }}
           path: build-artifacts
       - name: List Release Files
         run: ls build-artifacts
       - uses: montudor/action-zip@v1
         name: Create ZIP archive
         with:
-          args: zip -jr lancache-tdns-app-${{ env.VERSION }}.zip ./build-artifacts
+          args: zip -jr lancache-tdns-app-${{ github.ref_name }}.zip ./build-artifacts
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -35,4 +32,4 @@ jobs:
           prerelease: true
           title: "Development Build"
           files: |
-            lancache-tdns-app-${{ env.VERSION }}.zip
+            lancache-tdns-app-${{ github.ref_name }}.zip
