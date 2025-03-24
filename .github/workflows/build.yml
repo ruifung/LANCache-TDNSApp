@@ -29,16 +29,16 @@ jobs:
         dotnet-version: 8.0.x
     - name: Build TechnitiumLibrary.Net
       working-directory: ./TechnitiumLibrary
-      run: dotnet build ./TechnitiumLibrary.Net -c ${{ inputs.configuration }}
+      run: dotnet build ./TechnitiumLibrary.Net -c Release
     - name: Build DnsServerCore.ApplicationCommon
       working-directory: ./DnsServer
-      run: dotnet build ./DnsServerCore.ApplicationCommon
+      run: dotnet build ./DnsServerCore.ApplicationCommon -c Release
     - name: Restore dependencies
       working-directory: ./LANCacheApp
       run: dotnet restore
     - name: Build LANCacheApp
       working-directory: ./LANCacheApp
-      run: dotnet build --no-restore -c Release -p:Version=${{ inputs.version }}
+      run: dotnet build --no-restore -c ${{ inputs.configuration }} -p:Version=${{ inputs.version }}
     - name: Test
       working-directory: ./LANCacheApp
       run: dotnet test --no-build --verbosity normal
