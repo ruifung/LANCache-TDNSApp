@@ -38,7 +38,7 @@ jobs:
     - name: List Release Files
       run: ls LANCacheApp/bin/Release/
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: lancache-tdns-app
         path: LANCacheApp/bin/Release/
