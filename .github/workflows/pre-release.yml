@@ -9,7 +9,6 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       configuration: Debug
-      version: ${{ github.ref_name }}.${{ github.sha }}
       artifact-name: lancache-tdns-app-${{ github.ref_name }}
   pre-release:
     name: "Pre Release"

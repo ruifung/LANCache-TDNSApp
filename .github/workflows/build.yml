@@ -9,9 +9,6 @@ on:
       configuration:
         required: true
         type: string
-      version:
-        required: true
-        type: string
       artifact-name:
         required: true
         type: string
@@ -38,7 +35,7 @@ jobs:
       run: dotnet restore
     - name: Build LANCacheApp
       working-directory: ./LANCacheApp
-      run: dotnet build --no-restore -c ${{ inputs.configuration }} -p:Version=${{ inputs.version }}
+      run: dotnet build --no-restore -c ${{ inputs.configuration }}
     - name: Test
       working-directory: ./LANCacheApp
       run: dotnet test --no-build --verbosity normal
