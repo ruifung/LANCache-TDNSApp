@@ -12,14 +12,22 @@ on:
       artifact-name:
         required: true
         type: string
-
+    outputs:
+      version: ${{ jobs.build.outputs.version }}
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs: 
+      version: ${{ steps.package_version.outputs.version }}
     steps:
     - uses: actions/checkout@v3
       with:
         submodules: recursive
+    - name: Get version
+      id: package_version
+      uses: KageKirin/get-csproj-version@v1
+      with:
+        file: LANCacheApp/LanCacheApp.csproj
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:

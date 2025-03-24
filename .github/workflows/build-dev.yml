@@ -1,0 +1,13 @@
+﻿name: "build-dev"
+
+on:
+  push:
+    branches:
+      - *
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      configuration: Debug
+      artifact-name: lancache-tdns-app-${{ github.ref_name }}
