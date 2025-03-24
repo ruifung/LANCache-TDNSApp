@@ -23,10 +23,13 @@ namespace LanCache
     {
         #region variables
 
+        // ReSharper disable once InconsistentNaming
         private const string LANCACHE_DOMAINS_DATA_URL =
             "https://github.com/uklans/cache-domains/archive/refs/heads/master.zip";
 
+        // ReSharper disable once InconsistentNaming
         private const string LANCACHE_DOMAINS_DEFAULT_ZIP_PREFIX = "cache-domains-master/";
+        // ReSharper disable once InconsistentNaming
         private const string DUMMY_LANCACHE_ADDRESS = "lancache.example.com";
         private DateTime DomainsLastUpdated;
         private Timer? DomainsUpdateTimer;
@@ -95,7 +98,7 @@ namespace LanCache
             var domainsZipFile = Path.Combine(DnsServer.ApplicationFolder, "lancache-domains.zip");
             try
             {
-                var respStream = await hc.GetStreamAsync(LANCACHE_DOMAINS_DATA_URL);
+                var respStream = await hc.GetStreamAsync(Config.DomainsDataUrl);
                 await using var fileStream = new FileStream($"{domainsZipFile}.download", FileMode.Create);
                 await respStream.CopyToAsync(fileStream);
                 File.Move($"{domainsZipFile}.download", domainsZipFile, true);
