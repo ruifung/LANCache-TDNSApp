@@ -13,7 +13,9 @@ on:
         required: true
         type: string
     outputs:
-      version: ${{ jobs.build.outputs.version }}
+      version:
+        description: "Version of the built project from CSProj"
+        value: ${{ jobs.build.outputs.version }}
 jobs:
   build:
     runs-on: ubuntu-latest
