@@ -4,10 +4,17 @@
 name: Build Project
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_call: 
+    inputs:
+      configuration:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      artifact-name:
+        required: true
+        type: string
 
 jobs:
   build:
@@ -22,7 +29,7 @@ jobs:
         dotnet-version: 8.0.x
     - name: Build TechnitiumLibrary.Net
       working-directory: ./TechnitiumLibrary
-      run: dotnet build ./TechnitiumLibrary.Net -c Release
+      run: dotnet build ./TechnitiumLibrary.Net -c ${{ inputs.configuration }}
     - name: Build DnsServerCore.ApplicationCommon
       working-directory: ./DnsServer
       run: dotnet build ./DnsServerCore.ApplicationCommon
@@ -31,7 +38,7 @@ jobs:
       run: dotnet restore
     - name: Build LANCacheApp
       working-directory: ./LANCacheApp
-      run: dotnet build --no-restore -c Release
+      run: dotnet build --no-restore -c Release -p:Version=${{ inputs.version }}
     - name: Test
       working-directory: ./LANCacheApp
       run: dotnet test --no-build --verbosity normal
@@ -40,6 +47,6 @@ jobs:
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: lancache-tdns-app
+        name: ${{ inputs.artifact-name }}
         path: LANCacheApp/bin/Release/
         if-no-files-found: error
