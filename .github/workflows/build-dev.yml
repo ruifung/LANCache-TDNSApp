@@ -1,9 +1,10 @@
 ﻿name: "build-dev"
 
 on:
-  push:
+  push: 
     branches:
-      - *
+      - dev
+      - main
 
 jobs:
   build:

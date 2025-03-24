@@ -11,10 +11,13 @@ jobs:
     with:
       configuration: Release
       artifact-name: lancache-tdns-app-${{ github.ref_name }}
-  pre-release:
+  release:
     name: "Release"
     runs-on: "ubuntu-latest"
     needs: [build]
+    permissions: 
+      contents: write
+      discussions: write
     steps:
       - uses: "actions/download-artifact@v4"
         with:
@@ -31,4 +34,5 @@ jobs:
           artifacts: "lancache-tdns-app-${{ needs.build.outputs.version }}.zip"
           generateReleaseNotes: 'true'
           name: 'v${{ needs.build.outputs.version }}'
+          discussionCategory: 'Releases'
           
