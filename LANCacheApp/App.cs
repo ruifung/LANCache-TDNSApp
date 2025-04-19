@@ -19,7 +19,7 @@ using TechnitiumLibrary.Net.Http.Client;
 
 namespace LanCache
 {
-    public partial class App: IDnsApplication
+    public partial class App: IDnsApplication, IDnsApplicationPreference
     {
         #region variables
 
@@ -279,7 +279,9 @@ namespace LanCache
         
         #region public
 
-        public string Description { get; } = "DNS App that implements LanCache.NET DNS functionality.";
+        public byte Preference => Config.AppPreference;
+
+        public string Description => "DNS App that implements LanCache.NET DNS functionality.";
 
         public async Task InitializeAsync(IDnsServer dnsServer, string config)
         {
@@ -361,6 +363,8 @@ namespace LanCache
         public List<string> EnabledCaches { get; set; } = new();
         public List<string> DisabledCaches { get; set; } = new();
         public Dictionary<string, List<string>> CacheAddresses { get; set; } = new();
+
+        public byte AppPreference { get; set; } = 50;
     }
 
     [SuppressMessage("ReSharper", "CollectionNeverUpdated.Global")]

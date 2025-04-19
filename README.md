@@ -33,6 +33,7 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
 | Property                 | Description                                                                                                                                                                                                                                 | Default                                                               |
 |--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
 | lanCacheEnabled          | Is LANCache functionality enabled.                                                                                                                                                                                                          | false                                                                 |
+| appPreference            | Order in which multiple overlapping DNS Apps are evaluted. Lower comes first.                                                                                                                                                               | 50                                                                    |
 | operatingMode            | Which T-DNS App type should this DNS App operate as. Valid values: Blocking or Authoritative                                                                                                                                                | Authoritative                                                         |
 | enableDebugLogging       | Enable debug log messages                                                                                                                                                                                                                   | false                                                                 |
 | domainsDataUrl           | The URL to which to fetch LANCache domains data from.<br/>Must be a zip file containing a cache_domains.json file. <br/> See https://github.com/uklans/cache-domains                                                                        | https://github.com/uklans/cache-domains/archive/refs/heads/master.zip |
@@ -47,6 +48,7 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
 ```json
 {
   "lanCacheEnabled": false,
+  "appPreference":  50,
   "enableDebugLogging": false,
   "domainsDataUrl": "https://github.com/uklans/cache-domains/archive/refs/heads/master.zip",
   "domainsDataPathPrefix": "cache-domains-master/",
