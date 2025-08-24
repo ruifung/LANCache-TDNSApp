@@ -365,6 +365,8 @@ namespace LanCache
         public Dictionary<string, List<string>> CacheAddresses { get; set; } = new();
 
         public byte AppPreference { get; set; } = 50;
+        
+        public bool LegacyUpstreamBehavior { get; set; } = false;
     }
 
     [SuppressMessage("ReSharper", "CollectionNeverUpdated.Global")]
