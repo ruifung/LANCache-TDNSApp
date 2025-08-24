@@ -8,7 +8,7 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
 ## Requirements
 1. Technitium DNS server
 2. LANCache Monolithic instance(s) (Or other compatible implementation.)
-
+3. The cache server should ideally be [accessible using a address in the ULA/RFC1918 IP address range](https://lancache.net/docs/common-issues/#non-rfc1918-ip-ranges). 
 ## Installation
 
 1. Download the ZIP file from [Github Releases](https://github.com/ruifung/LANCache-TDNSApp/releases/latest)
