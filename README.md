@@ -9,15 +9,6 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
 1. Technitium DNS server
 2. LANCache Monolithic instance(s) (Or other compatible implementation.)
 
-## Troubleshooting LANCache issues
-Please have a look at https://lancache.net/docs/common-issues
-
-Note: Issues related to lancache-dns are not relevant as this replaces that.
-
-### IPv6 Support
-While the official lancache-dns does not support IPv6, LANCache-TDNSApp does.
-Ensure your lancache-monolithic (Or other caching implementation) is IPv6 enabled and it should just work.
-
 ## Installation
 
 1. Download the ZIP file from [Github Releases](https://github.com/ruifung/LANCache-TDNSApp/releases/latest)
@@ -96,3 +87,13 @@ Ensure your lancache-monolithic (Or other caching implementation) is IPv6 enable
   "disabledCaches": []
 }
 ```
+
+## Troubleshooting LANCache issues
+Please have a look at https://lancache.net/docs/common-issues
+
+Note: Issues related to lancache-dns are not relevant as this replaces that.
+
+### IPv6 Support
+While the official lancache-dns does not support IPv6, LANCache-TDNSApp does.
+
+Ensure your lancache-monolithic (Or other caching implementation) is IPv6 enabled and it should just work.
