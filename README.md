@@ -11,6 +11,7 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
 
 ## Troubleshooting LANCache issues
 Please have a look at https://lancache.net/docs/common-issues
+
 Note: Issues related to lancache-dns are not relevant as this replaces that.
 
 ### IPv6 Support
