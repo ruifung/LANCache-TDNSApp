@@ -1,4 +1,7 @@
 # LANCache-TDNSApp
+[![build-dev](https://github.com/ruifung/LANCache-TDNSApp/actions/workflows/build-dev.yml/badge.svg)](https://github.com/ruifung/LANCache-TDNSApp/actions/workflows/build-dev.yml)
+[![release](https://github.com/ruifung/LANCache-TDNSApp/actions/workflows/release.yml/badge.svg)](https://github.com/ruifung/LANCache-TDNSApp/actions/workflows/release.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ruifung/LANCache-TDNSApp) 
 
 Technitium DNS App for LANCache.NET
 
