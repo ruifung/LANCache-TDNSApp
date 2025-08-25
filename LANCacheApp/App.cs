@@ -367,6 +367,7 @@ namespace LanCache
         public Dictionary<string, List<string>> CacheAddresses { get; set; } = new();
 
         public byte AppPreference { get; set; } = 50;
+        public uint RecordTtl { get; set; } = 3600;
         
         public bool LegacyUpstreamBehavior { get; set; } = false;
     }

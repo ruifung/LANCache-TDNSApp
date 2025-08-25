@@ -61,10 +61,12 @@ public partial class App
             WriteDebugLog("Resolved cache addresses: " + string.Join(", ", cacheAddresses));
             var answers = new List<DnsResourceRecord>();
             var domainZone = foundZone ?? question.Name;
-            var authority = new []{new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, 60, SoaRecord)};
+            var authority = new []{new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, Config.RecordTtl, SoaRecord)};
 
             if (question.Type == DnsResourceRecordType.NS)
-                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.NS, question.Class, 60, NsRecord));
+                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.NS, question.Class, Config.RecordTtl, NsRecord));
+            else if (question.Type == DnsResourceRecordType.SOA)
+                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.SOA, question.Class, Config.RecordTtl, SoaRecord));
             else
                 foreach (var cacheAddress in cacheAddresses.Where(t => t != DUMMY_LANCACHE_ADDRESS))
                 {
@@ -79,7 +81,7 @@ public partial class App
                                 {
                                     WriteDebugLog("Creating A record");
                                     answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.A,
-                                        question.Class, 60, new DnsARecordData(ipAddress)));
+                                        question.Class, Config.RecordTtl, new DnsARecordData(ipAddress)));
                                 }
                                 break;
                             case AddressFamily.InterNetworkV6:
@@ -87,7 +89,7 @@ public partial class App
                                 {
                                     WriteDebugLog("Creating AAAA record");
                                     answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.AAAA,
-                                        question.Class, 60, new DnsAAAARecordData(ipAddress)));
+                                        question.Class, Config.RecordTtl, new DnsAAAARecordData(ipAddress)));
                                 }
 
                                 break;
@@ -105,7 +107,7 @@ public partial class App
                             {
                                 WriteDebugLog("Creating CNAME record");
                                 answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.CNAME, question.Class,
-                                    60,
+                                    Config.RecordTtl,
                                     new DnsCNAMERecordData(cacheAddress)));
                                 var newQuestion = new DnsQuestionRecord(cacheAddress, question.Type, question.Class);
                                 WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
@@ -142,7 +144,6 @@ public partial class App
             // This aligns with the official lancache-dns as that configures a zone per cached domain, which would effectively result in this.
             WriteDebugLog("Returning DNSDatagram with NXDOMAIN response");
             return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
-                request.RecursionDesired, true, false, false, DnsResponseCode.NxDomain, request.Question, null,
-                authority);
+                request.RecursionDesired, true, false, false, DnsResponseCode.NxDomain, request.Question, null, authority);
         }
 }
