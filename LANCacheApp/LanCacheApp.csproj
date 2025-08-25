@@ -4,13 +4,13 @@
         <TargetFramework>net8.0</TargetFramework>
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-        <Version>1.3.0</Version>
+        <Version>1.3.1</Version>
         <Company>N/A</Company>
         <Product>LANCache T-DNS App</Product>
         <Authors>ruifung</Authors>
         <AssemblyName>LanCacheApp</AssemblyName>
         <RootNamespace>LanCache</RootNamespace>
-        <PackageProjectUrl></PackageProjectUrl>
+        <PackageProjectUrl>https://github.com/ruifung/LANCache-TDNSApp</PackageProjectUrl>
         <RepositoryUrl>https://github.com/ruifung/LANCache-TDNSApp</RepositoryUrl>
         <Description>Implements the DNS logic for LanCache.NET</Description>
         <GeneratePackageOnBuild>false</GeneratePackageOnBuild>

@@ -13,6 +13,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using DnsServerCore.ApplicationCommon;
+using TechnitiumLibrary.Net;
 using TechnitiumLibrary.Net.Dns;
 using TechnitiumLibrary.Net.Dns.ResourceRecords;
 using TechnitiumLibrary.Net.Http.Client;
@@ -41,8 +42,9 @@ namespace LanCache
         private DnsNSRecordData NsRecord = null!;
         private string CacheDomainsCacheFile = null!;
         private string WildcardDomainsCacheFile = null!;
-        private IReadOnlySet<IPAddress> ignoredClientAddresses = new HashSet<IPAddress>();
-        
+        #pragma warning disable CA1859
+        private IReadOnlySet<NetworkAddress> IgnoredClientNetworkAddresses = new HashSet<NetworkAddress>();
+        #pragma warning restore CA1859
         #endregion
 
         #region private
@@ -236,13 +238,13 @@ namespace LanCache
                 .Where(addr => addr != DUMMY_LANCACHE_ADDRESS)
                 .ToHashSet();
 
-            var ipSet = new HashSet<IPAddress>();
+            var addrSet = new HashSet<NetworkAddress>();
             foreach (var addr in addressSet)
             {
-                var isIp = IPAddress.TryParse(addr, out var ipAddress);
-                if (isIp && ipAddress?.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
+                var isNetAddr = NetworkAddress.TryParse(addr, out var networkAddress);
+                if (isNetAddr && networkAddress?.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
                 {
-                    ipSet.Add(ipAddress);
+                    addrSet.Add(networkAddress);
                 }
                 else
                 {
@@ -257,12 +259,12 @@ namespace LanCache
                         foreach (var dnsResourceRecord in v4Result.Answer.Where(ans => ans.Type is DnsResourceRecordType.A))
                         {
                             var ip = ((DnsARecordData)dnsResourceRecord.RDATA).Address;
-                            ipSet.Add(ip);
+                            addrSet.Add(new NetworkAddress(ip, 32));
                         }
                         foreach (var dnsResourceRecord in v6Result.Answer.Where(ans => ans.Type is DnsResourceRecordType.AAAA))
                         {
                             var ip = ((DnsAAAARecordData)dnsResourceRecord.RDATA).Address;
-                            ipSet.Add(ip);
+                            addrSet.Add(new NetworkAddress(ip, 128));
                         }
                     }
                     catch (DnsClientException)
@@ -272,7 +274,7 @@ namespace LanCache
                 }
             }
 
-            ignoredClientAddresses = ipSet;
+            IgnoredClientNetworkAddresses = addrSet;
         }
 
         #endregion
