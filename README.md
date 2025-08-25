@@ -44,6 +44,7 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
 | cacheAddresses           | Used to override the cache addresses for specific cache types.<br/> Consult the cache_domains.json file in file specified in domainsDataUrl for cache types.<br/> Set to empty object {} if all caches should use the globalCacheAddresses. | { "steam": ["lancache.example.com"] }                                 |
 | enabledCaches            | Cache type enable list. Used if set and non-empty.<br/> If non-empty, cache types MUST be specified here to be used.<br/> Set to empty list [] to disable.                                                                                  | ["steam"]                                                             |
 | disabledCaches           | Cache type disable list. Used if set and non-empty.<br/> If non-empty, cache types MUST NOT be specified here to be used.<br/> Set to empty list [] to disable.                                                                             | ["wsus"]                                                              |
+| recordTtl                | TTL to use when returning records for the cached domains.                                                                                                                                                                                   | 3600                                                                  |
 
 ### Default configuration
 ```json
