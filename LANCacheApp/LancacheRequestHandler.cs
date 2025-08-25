@@ -18,7 +18,7 @@ public partial class App
 {
         public async Task<DnsDatagram> HandleLancacheRequest(DnsDatagram request, IPEndPoint remoteEp, OperatingMode mode)
         {
-            if (!Config.LanCacheEnabled || mode != Config.OperatingMode || ignoredClientAddresses.Contains(remoteEp.Address))
+            if (!Config.LanCacheEnabled || mode != Config.OperatingMode || IgnoredClientNetworkAddresses.Any(netAddr => netAddr.Contains(remoteEp.Address)))
             {
                 return null!;
             }
