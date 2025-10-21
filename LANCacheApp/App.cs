@@ -101,8 +101,10 @@ namespace LanCache
             try
             {
                 var respStream = await hc.GetStreamAsync(Config.DomainsDataUrl);
-                await using var fileStream = new FileStream($"{domainsZipFile}.download", FileMode.Create);
-                await respStream.CopyToAsync(fileStream);
+                await using (var fileStream = new FileStream($"{domainsZipFile}.download", FileMode.Create))
+                {
+                    await respStream.CopyToAsync(fileStream);
+                }
                 File.Move($"{domainsZipFile}.download", domainsZipFile, true);
             }
             catch (Exception ex)
