@@ -16,134 +16,145 @@ public enum OperatingMode
 
 public partial class App
 {
-        public async Task<DnsDatagram> HandleLancacheRequest(DnsDatagram request, IPEndPoint remoteEp, OperatingMode mode)
+    private async Task<DnsDatagram> HandleLancacheRequest(DnsDatagram request, IPEndPoint remoteEp, OperatingMode mode)
+    {
+        if (!Config.LanCacheEnabled || mode != Config.OperatingMode ||
+            IgnoredClientNetworkAddresses.Any(netAddr => netAddr.Contains(remoteEp.Address)))
         {
-            if (!Config.LanCacheEnabled || mode != Config.OperatingMode || IgnoredClientNetworkAddresses.Any(netAddr => netAddr.Contains(remoteEp.Address)))
-            {
-                return null!;
-            }
-            var question = request.Question[0];
-            var foundDirect = IsZoneFound(LanCacheDomains, question.Name, out var foundZone, out var cacheTarget);
-            // Use short-circuiting to skip the wildcard search if it matches a direct domain.
-            var foundWild = !foundDirect && IsZoneFound(WildcardDomains, question.Name, out foundZone, out cacheTarget);
+            return null!;
+        }
 
-            if ((!foundDirect && !foundWild) || cacheTarget == null)
-            {
-                return null!;
-            }
+        var question = request.Question[0];
+        var foundDirect = IsZoneFound(LanCacheDomains, question.Name, out var foundZone, out var cacheTarget);
+        // Use short-circuiting to skip the wildcard search if it matches a direct domain.
+        var foundWild = !foundDirect && IsZoneFound(WildcardDomains, question.Name, out foundZone, out cacheTarget);
 
-            // Skip processing if the enabled cache whitelist is set, and the cache isn't enabled.
-            if (Config.EnabledCaches.Count > 0 && !Config.EnabledCaches.Contains(cacheTarget))
-            {
-                return null!;
-            }
-            
-            // Skip processing if the disabled cache blacklist is set, and the cache is disabled.
-            if (Config.DisabledCaches.Count > 0 && Config.DisabledCaches.Contains(cacheTarget))
-            {
-                return null!;
-            }
-            
-            WriteDebugLog("Resolving cache addresses for cache: " + cacheTarget);
-            var hasOverride = Config.CacheAddresses.TryGetValue(cacheTarget, out var cacheAddresses);
-            if (!hasOverride || cacheAddresses == null)
-            {
-                cacheAddresses = Config.GlobalCacheAddresses;
-            }
+        if ((!foundDirect && !foundWild) || cacheTarget == null)
+        {
+            return null!;
+        }
 
-            // Skip processing if there are no cache addresses specified for the cache. (Effectively disabled)
-            if (cacheAddresses.Count == 0)
+        // Skip processing if the enabled cache whitelist is set, and the cache isn't enabled.
+        if (Config.EnabledCaches.Count > 0 && !Config.EnabledCaches.Contains(cacheTarget))
+        {
+            return null!;
+        }
+
+        // Skip processing if the disabled cache blacklist is set, and the cache is disabled.
+        if (Config.DisabledCaches.Count > 0 && Config.DisabledCaches.Contains(cacheTarget))
+        {
+            return null!;
+        }
+
+        WriteDebugLog("Resolving cache addresses for cache: " + cacheTarget);
+        var hasOverride = Config.CacheAddresses.TryGetValue(cacheTarget, out var cacheAddresses);
+        if (!hasOverride || cacheAddresses == null)
+        {
+            cacheAddresses = Config.GlobalCacheAddresses;
+        }
+
+        // Skip processing if there are no cache addresses specified for the cache. (Effectively disabled)
+        if (cacheAddresses.Count == 0)
+        {
+            DnsServer.WriteLog("Skipping cache as they are no cache addresses specified for cache: " + cacheTarget);
+            return null!;
+        }
+
+        WriteDebugLog("Resolved cache addresses: " + string.Join(", ", cacheAddresses));
+        var answers = new List<DnsResourceRecord>();
+        var domainZone = foundZone ?? question.Name;
+        var authority = new[]
+        {
+            new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, Config.RecordTtl, SoaRecord)
+        };
+
+        if (question.Type == DnsResourceRecordType.NS)
+            answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.NS, question.Class, Config.RecordTtl,
+                NsRecord));
+        else if (question.Type == DnsResourceRecordType.SOA)
+            answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.SOA, question.Class,
+                Config.RecordTtl, SoaRecord));
+        else
+            foreach (var cacheAddress in cacheAddresses.Where(t => t != DUMMY_LANCACHE_ADDRESS))
             {
-                DnsServer.WriteLog("Skipping cache as they are no cache addresses specified for cache: " + cacheTarget);
-                return null!;
-            }
-
-            WriteDebugLog("Resolved cache addresses: " + string.Join(", ", cacheAddresses));
-            var answers = new List<DnsResourceRecord>();
-            var domainZone = foundZone ?? question.Name;
-            var authority = new []{new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, Config.RecordTtl, SoaRecord)};
-
-            if (question.Type == DnsResourceRecordType.NS)
-                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.NS, question.Class, Config.RecordTtl, NsRecord));
-            else if (question.Type == DnsResourceRecordType.SOA)
-                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.SOA, question.Class, Config.RecordTtl, SoaRecord));
-            else
-                foreach (var cacheAddress in cacheAddresses.Where(t => t != DUMMY_LANCACHE_ADDRESS))
+                var isIpAddress = IPAddress.TryParse(cacheAddress, out var ipAddress);
+                if (isIpAddress)
                 {
-                    var isIpAddress = IPAddress.TryParse(cacheAddress, out var ipAddress);
-                    if (isIpAddress)
+                    // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
+                    switch (ipAddress?.AddressFamily)
                     {
-                        // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
-                        switch (ipAddress?.AddressFamily)
-                        {
-                            case AddressFamily.InterNetwork:
-                                if (question.Type == DnsResourceRecordType.A)
-                                {
-                                    WriteDebugLog("Creating A record");
-                                    answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.A,
-                                        question.Class, Config.RecordTtl, new DnsARecordData(ipAddress)));
-                                }
-                                break;
-                            case AddressFamily.InterNetworkV6:
-                                if (question.Type == DnsResourceRecordType.AAAA)
-                                {
-                                    WriteDebugLog("Creating AAAA record");
-                                    answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.AAAA,
-                                        question.Class, Config.RecordTtl, new DnsAAAARecordData(ipAddress)));
-                                }
+                        case AddressFamily.InterNetwork:
+                            if (question.Type == DnsResourceRecordType.A)
+                            {
+                                WriteDebugLog("Creating A record");
+                                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.A,
+                                    question.Class, Config.RecordTtl, new DnsARecordData(ipAddress)));
+                            }
 
-                                break;
-                            default:
-                                DnsServer.WriteLog("Found non v4/v6 IP address somehow: " + cacheAddress);
-                                break;
-                        }
-                    }
-                    else
-                    {
-                        if (cacheAddress == question.Name)
-                            DnsServer.WriteLog($"Attempted to cache {cacheAddress} using itself!");
-                        else
-                            try
+                            break;
+                        case AddressFamily.InterNetworkV6:
+                            if (question.Type == DnsResourceRecordType.AAAA)
                             {
-                                WriteDebugLog("Creating CNAME record");
-                                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.CNAME, question.Class,
-                                    Config.RecordTtl,
-                                    new DnsCNAMERecordData(cacheAddress)));
-                                var newQuestion = new DnsQuestionRecord(cacheAddress, question.Type, question.Class);
-                                WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
-                                var newResponse = await DnsServer.DirectQueryAsync(newQuestion);
-                                if (newResponse.RCODE is DnsResponseCode.NoError)
-                                    answers.AddRange(newResponse.Answer);
-                                else
-                                    DnsServer.WriteLog($"Error querying cache target {cacheAddress} for QTYPE {question.Type} with RCODE {newResponse.RCODE}");
+                                WriteDebugLog("Creating AAAA record");
+                                answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.AAAA,
+                                    question.Class, Config.RecordTtl, new DnsAAAARecordData(ipAddress)));
                             }
-                            catch (DnsClientException)
-                            {
-                                DnsServer.WriteLog("Invalid CNAME target: " + cacheAddress);
-                            }
+
+                            break;
+                        default:
+                            DnsServer.WriteLog("Found non v4/v6 IP address somehow: " + cacheAddress);
+                            break;
                     }
                 }
-            
-            // No valid cache targets found, handle normally to not break the cached urls.
-            if (answers.Count > 0)
-            {
-                WriteDebugLog($"Returning DNSDatagram with {answers.Count} answers");
-                return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
-                    request.RecursionDesired, true, false, false, DnsResponseCode.NoError, request.Question, answers, authority);
+                else
+                {
+                    if (cacheAddress == question.Name)
+                        DnsServer.WriteLog($"Attempted to cache {cacheAddress} using itself!");
+                    else
+                        try
+                        {
+                            WriteDebugLog("Creating CNAME record");
+                            answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.CNAME,
+                                question.Class,
+                                Config.RecordTtl,
+                                new DnsCNAMERecordData(cacheAddress)));
+                            var newQuestion = new DnsQuestionRecord(cacheAddress, question.Type, question.Class);
+                            WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
+                            var newResponse = await DnsServer.DirectQueryAsync(newQuestion);
+                            if (newResponse.RCODE is DnsResponseCode.NoError)
+                                answers.AddRange(newResponse.Answer);
+                            else
+                                DnsServer.WriteLog(
+                                    $"Error querying cache target {cacheAddress} for QTYPE {question.Type} with RCODE {newResponse.RCODE}");
+                        }
+                        catch (DnsClientException)
+                        {
+                            DnsServer.WriteLog("Invalid CNAME target: " + cacheAddress);
+                        }
+                }
             }
-            
-            if (Config.LegacyUpstreamBehavior)
-            {
-                if (question.Type is DnsResourceRecordType.A or DnsResourceRecordType.AAAA)
-                    DnsServer.WriteLog($"No valid targets found for cache: {cacheTarget}, skipping processing");
 
-                return null!;
-            }
-
-            // If legacy behavior is not enabled, return NXDomain for intercepted cache domains.
-            // This aligns with the official lancache-dns as that configures a zone per cached domain, which would effectively result in this.
-            WriteDebugLog("Returning DNSDatagram with NXDOMAIN response");
+        // No valid cache targets found, handle normally to not break the cached urls.
+        if (answers.Count > 0)
+        {
+            WriteDebugLog($"Returning DNSDatagram with {answers.Count} answers");
             return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
-                request.RecursionDesired, true, false, false, DnsResponseCode.NxDomain, request.Question, null, authority);
+                request.RecursionDesired, true, false, false, DnsResponseCode.NoError, request.Question, answers,
+                authority);
         }
+
+        if (Config.LegacyUpstreamBehavior)
+        {
+            if (question.Type is DnsResourceRecordType.A or DnsResourceRecordType.AAAA)
+                DnsServer.WriteLog($"No valid targets found for cache: {cacheTarget}, skipping processing");
+
+            return null!;
+        }
+
+        // If legacy behavior is not enabled, return NXDomain for intercepted cache domains.
+        // This aligns with the official lancache-dns as that configures a zone per cached domain, which would effectively result in this.
+        WriteDebugLog("Returning DNSDatagram with NXDOMAIN response");
+        return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
+            request.RecursionDesired, true, false, false, DnsResponseCode.NxDomain, request.Question, null, authority);
+    }
 }
