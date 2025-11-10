@@ -336,6 +336,11 @@ namespace LanCache
             return i > -1 ? domain[(i + 1)..] : null;
         }
 
+        private static bool IsZoneFound(IReadOnlyDictionary<string, string> domains, string domain)
+        {
+            return IsZoneFound(domains, domain, out _, out _);
+        }
+        
         private static bool IsZoneFound(IReadOnlyDictionary<string, string> domains, string domain,
             out string? foundZone, out string? cacheTarget)
         {

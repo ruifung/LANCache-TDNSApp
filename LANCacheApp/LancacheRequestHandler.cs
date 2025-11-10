@@ -62,11 +62,15 @@ public partial class App
 
         WriteDebugLog("Resolved cache addresses: " + string.Join(", ", cacheAddresses));
         var answers = new List<DnsResourceRecord>();
+        var additional = new List<DnsResourceRecord>();
         var domainZone = foundZone ?? question.Name;
         var authority = new[]
         {
             new DnsResourceRecord(domainZone, DnsResourceRecordType.SOA, question.Class, Config.RecordTtl, SoaRecord)
         };
+        
+        additional.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, 60,
+            new DnsTXTRecordData($"source=lancache-app; cache={cacheTarget}, cache-domain={domainZone}")));
 
         if (question.Type == DnsResourceRecordType.NS)
             answers.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.NS, question.Class, Config.RecordTtl,
@@ -119,13 +123,24 @@ public partial class App
                                 Config.RecordTtl,
                                 new DnsCNAMERecordData(cacheAddress)));
                             var newQuestion = new DnsQuestionRecord(cacheAddress, question.Type, question.Class);
-                            WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
-                            var newResponse = await DnsServer.DirectQueryAsync(newQuestion);
-                            if (newResponse.RCODE is DnsResponseCode.NoError)
-                                answers.AddRange(newResponse.Answer);
+                            
+                            var cacheAddressIsInCachedDomains = IsZoneFound(LanCacheDomains, cacheAddress) || IsZoneFound(WildcardDomains, cacheAddress);
+                            if (!cacheAddressIsInCachedDomains)
+                            {
+                                WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
+                                var newResponse = await DnsServer.ResolveAsync(newQuestion);
+                                if (newResponse.RCODE is DnsResponseCode.NoError)
+                                    answers.AddRange(newResponse.Answer);
+                                else
+                                    DnsServer.WriteLog(
+                                        $"Error querying cache target {cacheAddress} for QTYPE {question.Type} with RCODE {newResponse.RCODE}");
+                            }
                             else
-                                DnsServer.WriteLog(
-                                    $"Error querying cache target {cacheAddress} for QTYPE {question.Type} with RCODE {newResponse.RCODE}");
+                            {
+                                WriteDebugLog($"Cache address is itself, present in cached domains, skipping CNAME resolution.");
+                                additional.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, 60,
+                                    new DnsTXTRecordData("source=lancache-app; warning=cache-address-is-cached-domain")));
+                            }
                         }
                         catch (DnsClientException)
                         {
@@ -140,7 +155,7 @@ public partial class App
             WriteDebugLog($"Returning DNSDatagram with {answers.Count} answers");
             return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
                 request.RecursionDesired, true, false, false, DnsResponseCode.NoError, request.Question, answers,
-                authority);
+                authority, additional);
         }
 
         if (Config.LegacyUpstreamBehavior)
