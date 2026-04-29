@@ -22,7 +22,7 @@ jobs:
     outputs: 
       version: ${{ steps.package_version.outputs.version }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6.0.2
       with:
         submodules: recursive
     - name: Get version
@@ -31,9 +31,9 @@ jobs:
       with:
         file: LANCacheApp/LanCacheApp.csproj
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v5.2.0
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.x
     - name: Build TechnitiumLibrary.Net
       working-directory: ./TechnitiumLibrary
       run: dotnet build ./TechnitiumLibrary.Net -c Release
