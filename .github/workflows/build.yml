@@ -54,7 +54,7 @@ jobs:
       run: dotnet build --no-restore -c ${{ inputs.configuration }}
     - name: Test
       working-directory: ./LANCacheApp.Tests
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test --no-build --verbosity normal -c ${{ inputs.configuration }}
     - name: List Release Files
       run: ls LANCacheApp/bin/${{ inputs.configuration }}/
     - name: Upload Build Artifacts
