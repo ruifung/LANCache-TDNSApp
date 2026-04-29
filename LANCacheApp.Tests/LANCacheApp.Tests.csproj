@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\LANCacheApp\LANCacheApp.csproj" />
+    <ProjectReference Include="..\LANCacheApp\LanCacheApp.csproj" />
     <ProjectReference Include="..\TechnitiumLibrary\TechnitiumLibrary.Net\TechnitiumLibrary.Net.csproj" />
     <ProjectReference Include="..\DnsServer\DnsServerCore.ApplicationCommon\DnsServerCore.ApplicationCommon.csproj" />
   </ItemGroup>
