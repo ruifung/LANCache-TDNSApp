@@ -102,3 +102,6 @@ Note: Issues related to lancache-dns are not relevant as this replaces that.
 While the official lancache-dns does not support IPv6, LANCache-TDNSApp does.
 
 Ensure your lancache-monolithic (Or other caching implementation) is IPv6 enabled and it should just work.
+
+## AI Usage Disclosure
+AI has been used to generate the unit tests and assist in documentation maintenance.

@@ -1,0 +1,40 @@
+﻿version: '3'
+
+vars:
+  CONFIGURATION: '{{.CONFIGURATION | default "Debug"}}'
+
+tasks:
+  default:
+    cmd: task -l
+    silent: true
+
+  build-deps:
+    desc: Builds dependency projects (TechnitiumLibrary and DnsServerCore).
+    cmds:
+      - dotnet build TechnitiumLibrary/TechnitiumLibrary.Net -c Release
+      - dotnet build DnsServer/DnsServerCore.ApplicationCommon -c Release
+
+  restore:
+    desc: Restores dependencies for LANCacheApp.
+    cmds:
+      - dotnet restore LANCacheApp
+
+  build:
+    desc: Builds LANCacheApp.
+    deps: [build-deps]
+    cmds:
+      - task: build-deps
+      - task: restore
+      - dotnet build LANCacheApp --no-restore -c {{.CONFIGURATION}}
+
+  test:
+    desc: Runs tests for LANCacheApp.
+    cmds:
+      - dotnet test LANCacheApp.Tests --no-build --verbosity normal
+
+  clean:
+    desc: Cleans the build artifacts.
+    cmds:
+      - dotnet clean LANCacheApp
+      - dotnet clean TechnitiumLibrary/TechnitiumLibrary.Net
+      - dotnet clean DnsServer/DnsServerCore.ApplicationCommon

@@ -46,8 +46,14 @@ jobs:
     - name: Build LANCacheApp
       working-directory: ./LANCacheApp
       run: dotnet build --no-restore -c ${{ inputs.configuration }}
+    - name: Restore dependencies for Tests
+      working-directory: ./LANCacheApp.Tests
+      run: dotnet restore
+    - name: Build LANCacheApp.Tests
+      working-directory: ./LANCacheApp.Tests
+      run: dotnet build --no-restore -c ${{ inputs.configuration }}
     - name: Test
-      working-directory: ./LANCacheApp
+      working-directory: ./LANCacheApp.Tests
       run: dotnet test --no-build --verbosity normal
     - name: List Release Files
       run: ls LANCacheApp/bin/${{ inputs.configuration }}/
