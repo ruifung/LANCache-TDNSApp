@@ -460,6 +460,7 @@ namespace LanCache
         public uint RecordTtl { get; init; } = 3600;
 
         public bool LegacyUpstreamBehavior { get; init; }
+        public bool FallbackOnCnameTargetNoAnswer { get; init; }
     }
 
     [SuppressMessage("ReSharper", "CollectionNeverUpdated.Global")]

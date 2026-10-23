@@ -159,7 +159,16 @@ public partial class App
             }
         }
 
-        // No valid cache targets found, handle normally to not break the cached urls.
+        var hasMatchingTypeAnswer = answers.Any(answer => answer.Type == question.Type);
+        var fallbackEnabled = _config.FallbackOnCnameTargetNoAnswer;
+        // If fallback is enabled, and the first answer is a CNAME, and there is no matching type answer.
+        // Return null so that T-DNS will handle the query normally.
+        if (fallbackEnabled && answers.Count > 0 && answers[0].Type == DnsResourceRecordType.CNAME && !hasMatchingTypeAnswer)
+        {
+            return null;
+        }
+        
+        // Happy path, return the response if it has answers and the first answer is not a CNAME
         if (answers.Count > 0)
         {
             WriteDebugLog($"Returning DNSDatagram with {answers.Count} answers");
@@ -167,7 +176,8 @@ public partial class App
                 request.RecursionDesired, true, false, false, DnsResponseCode.NoError, request.Question, answers,
                 authority, additional);
         }
-
+        
+        // If Legacy behavior is enabled, return null so that T-DNS will handle the query normally.
         if (_config.LegacyUpstreamBehavior)
         {
             if (question.Type is DnsResourceRecordType.A or DnsResourceRecordType.AAAA)
@@ -176,7 +186,7 @@ public partial class App
             return null;
         }
 
-        // If legacy behavior is not enabled, return NXDomain for intercepted cache domains.
+        // Return NXDomain for intercepted cache domains.
         // This aligns with the official lancache-dns as that configures a zone per cached domain, which would effectively result in this.
         WriteDebugLog("Returning DNSDatagram with NXDOMAIN response");
         return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,

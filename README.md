@@ -8,6 +8,8 @@ Technitium DNS App for LANCache.NET
 This DNS App, will use a specified set of domains to cache. And intercept requests for those domains with configured lancache addresses.<br/>
 This implements the functionality of [Lancache-DNS](https://lancache.net/docs/containers/dns/) and is intended to be used with [LANCache Monolithic](https://lancache.net/docs/containers/monolithic/).
 
+Cache targets may be hostnames as well as IP addresses. When a hostname is used, it is resolved internally by Technitium DNS, so the target can be provided by another T-DNS APP record—for example, the [Split Horizon](https://github.com/TechnitiumSoftware/DnsServer/tree/master/Apps/SplitHorizonApp) or Failover app. This lets those apps select or fail over between cache addresses when resolving the target.
+
 ## Requirements
 1. Technitium DNS server
 2. LANCache Monolithic instance(s) (Or other compatible implementation.)
@@ -33,45 +35,53 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
 7. Done
 
 ## Configuration
-| Property                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                    | Default                                                               |
-|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
-| lanCacheEnabled          | Is LANCache functionality enabled.                                                                                                                                                                                                                                                                                                                                                                                             | false                                                                 |
-| appPreference            | Order in which multiple overlapping DNS Apps are evaluted. Lower comes first.                                                                                                                                                                                                                                                                                                                                                  | 50                                                                    |
-| operatingMode            | Which T-DNS App type should this DNS App operate as. Valid values: Blocking or Authoritative                                                                                                                                                                                                                                                                                                                                   | Authoritative                                                         |
-| enableDebugLogging       | Enable debug log messages                                                                                                                                                                                                                                                                                                                                                                                                      | false                                                                 |
-| domainsDataUrl           | The URL to which to fetch LANCache domains data from.<br/>Must be a zip file containing a cache_domains.json file. <br/> See https://github.com/uklans/cache-domains                                                                                                                                                                                                                                                           | https://github.com/uklans/cache-domains/archive/refs/heads/master.zip |
-| domainsDataPathPrefix    | The path prefix to cache_domains.json inside the ZIP file. Useful since GitHub repository archive downloads have the contents in a subfolder.                                                                                                                                                                                                                                                                                  | cache-domains-master/                                                 |
-| domainsUpdatePeriodHours | How often to check for updates to the cached domains list.                                                                                                                                                                                                                                                                                                                                                                     | 24                                                                    |
-| ignoreClientAddresses    | Client addresses to skip processing for. Supports V4/V6 Addresses, Subnet in CIDR notation, and FQDNs.<br/> Domains will be resolved on app initialization into the V4/V6 addresses. Will contain any specified cache addresses automatically.<br/> Note: You may want to add "0.0.0.0" to the list if you have other DNS Apps that are performing internal queries as those requests will appear to be coming from "0.0.0.0". | []                                                                    |
-| globalCacheAddresses     | The lancache instances to use where a specific cache addresses have not been specified.<br/> May be either a valid domain, IPv4 address or IPv6 address.                                                                                                                                                                                                                                                                       | ["lancache.example.com"]                                              |
-| cacheAddresses           | Used to override the cache addresses for specific cache types.<br/> Consult the cache_domains.json file in file specified in domainsDataUrl for cache types.<br/> Set to empty object {} if all caches should use the globalCacheAddresses.                                                                                                                                                                                    | { "steam": ["lancache.example.com"] }                                 |
-| enabledCaches            | Cache type enable list. Used if set and non-empty.<br/> If non-empty, cache types MUST be specified here to be used.<br/> Set to empty list [] to disable.                                                                                                                                                                                                                                                                     | ["steam"]                                                             |
-| disabledCaches           | Cache type disable list. Used if set and non-empty.<br/> If non-empty, cache types MUST NOT be specified here to be used.<br/> Set to empty list [] to disable.                                                                                                                                                                                                                                                                | ["wsus"]                                                              |
-| recordTtl                | TTL to use when returning records for the cached domains.                                                                                                                                                                                                                                                                                                                                                                      | 3600                                                                  |
+| Property                        | Description                                                                                                                                                                                                                                                                                      | Default                                                                 |
+|---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| `lanCacheEnabled`               | Enables LANCache domain interception.                                                                                                                                                                                                                                                            | `false`                                                                 |
+| `appPreference`                 | Priority when multiple DNS Apps overlap; lower values are evaluated first.                                                                                                                                                                                                                       | `50`                                                                    |
+| `operatingMode`                 | T-DNS App mode in which LANCache handling runs. Valid values: `Blocking` or `Authoritative`.                                                                                                                                                                                                     | `Authoritative`                                                         |
+| `enableDebugLogging`            | Enables debug log messages.                                                                                                                                                                                                                                                                      | `false`                                                                 |
+| `domainsDataUrl`                | URL for the LANCache domains ZIP. It must contain a `cache_domains.json` file. See [cache-domains](https://github.com/uklans/cache-domains).                                                                                                                                                     | `https://github.com/uklans/cache-domains/archive/refs/heads/master.zip` |
+| `domainsDataPathPrefix`         | Path prefix to `cache_domains.json` inside the ZIP; GitHub archive downloads put the repository contents in a subfolder.                                                                                                                                                                         | `cache-domains-master/`                                                 |
+| `domainsUpdatePeriodHours`      | How often to check for updates to the cached domains list, in hours.                                                                                                                                                                                                                             | `24`                                                                    |
+| `ignoreClientAddresses`         | Client IPv4/IPv6 addresses, CIDR subnets, or FQDNs to skip. FQDNs are resolved to IPv4/IPv6 addresses at app initialization. Configured cache target addresses are automatically included. Add `0.0.0.0` if internal DNS App lookups should be ignored, since those may use that source address. | `[]`                                                                    |
+| `globalCacheAddresses`          | Cache targets used when no cache-type override is configured. Each target may be a hostname, IPv4 address, or IPv6 address.                                                                                                                                                                      | `[]`*                                                                   |
+| `cacheAddresses`                | Per-cache-type target overrides. Cache types come from `cache_domains.json`. Use `{}` to use `globalCacheAddresses` for all cache types. Each target may be a hostname or IP address.                                                                                                            | `{}`*                                                                   |
+| `enabledCaches`                 | Allowlist of cache types. When non-empty, only listed types are enabled; use `[]` to disable the allowlist.                                                                                                                                                                                      | `[]`                                                                    |
+| `disabledCaches`                | Denylist of cache types. Listed types are disabled; use `[]` for no exclusions.                                                                                                                                                                                                                  | `[]`                                                                    |
+| `recordTtl`                     | TTL, in seconds, used for records returned for cached domains.                                                                                                                                                                                                                                   | `3600`                                                                  |
+| `legacyUpstreamBehavior`        | For any cached domain with no cache answer, allow normal DNS processing to continue.                                                                                                                                                                                                             | `false`                                                                 |
+| `fallbackOnCnameTargetNoAnswer` | For hostname cache targets, allow normal DNS processing to continue when target resolution does not produce an answer matching the requested record type. When `false`, retain the CNAME even if no matching target record was resolved.                                                         | `false`                                                                 |
+
+\* The generated default configuration uses `lancache.example.com` as a placeholder in `globalCacheAddresses`, and for the `steam` and `windowsupdates` entries in `cacheAddresses`. Replace these example targets with your cache server(s). When a property is omitted from a supplied configuration, its type default is used (empty lists/maps, `false`, or the property default shown above).
 
 ### Default configuration
 ```json
 {
   "lanCacheEnabled": false,
-  "appPreference":  50,
+  "appPreference": 50,
+  "operatingMode": "Authoritative",
   "enableDebugLogging": false,
   "domainsDataUrl": "https://github.com/uklans/cache-domains/archive/refs/heads/master.zip",
   "domainsDataPathPrefix": "cache-domains-master/",
   "domainsUpdatePeriodHours": 24,
+  "ignoreClientAddresses": [],
   "globalCacheAddresses": [
     "lancache.example.com"
   ],
   "cacheAddresses": {
     "steam": [
       "lancache.example.com"
+    ],
+    "windowsupdates": [
+      "lancache.example.com"
     ]
   },
-  "enabledCaches": [
-    "steam"
-  ],
-  "disabledCaches": [
-    "wsus"
-  ]
+  "enabledCaches": [],
+  "disabledCaches": [],
+  "recordTtl": 3600,
+  "legacyUpstreamBehavior": false,
+  "fallbackOnCnameTargetNoAnswer": false
 }
 ```
 
@@ -89,7 +99,10 @@ This implements the functionality of [Lancache-DNS](https://lancache.net/docs/co
   ],
   "cacheAddresses": {},
   "enabledCaches": [],
-  "disabledCaches": []
+  "disabledCaches": [],
+  "recordTtl": 3600,
+  "legacyUpstreamBehavior": false,
+  "fallbackOnCnameTargetNoAnswer": false
 }
 ```
 
@@ -104,4 +117,5 @@ While the official lancache-dns does not support IPv6, LANCache-TDNSApp does.
 Ensure your lancache-monolithic (Or other caching implementation) is IPv6 enabled and it should just work.
 
 ## AI Usage Disclosure
-AI has been used to generate the unit tests and assist in documentation maintenance.
+AI tooling has been used to help in the maintenance of documentation and code.
+AI-generated code has been produced under supervision and reviewed appropriately.

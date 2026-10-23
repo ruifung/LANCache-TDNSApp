@@ -239,6 +239,40 @@ public class AppTests
     }
 
     [Test]
+    public async Task ProcessRequestAsync_FallbackOnCnameTargetNoAnswer_ReturnsNullWithoutMatchingRecordType()
+    {
+        const string target = "cache.example.net";
+        _mockDnsServer.Setup(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
+                DnsResponseCode.NoError, Array.Empty<DnsQuestionRecord>()));
+        await InitializeApp(JsonSerializer.Serialize(new
+        {
+            lanCacheEnabled = true, domainsUpdatePeriodHours = 24,
+            globalCacheAddresses = new[] { target }, fallbackOnCnameTargetNoAnswer = true
+        }));
+        SetPrivateField("_lanCacheDomains", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["source.com"] = "steam"
+        });
+        var targetQuestion = new DnsQuestionRecord(target, DnsResourceRecordType.A, DnsClass.IN);
+        _mockDnsServer.Setup(s => s.DirectQueryAsync(It.IsAny<DnsDatagram>(), It.IsAny<IPEndPoint>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
+                DnsResponseCode.NoError, new[] { targetQuestion }, new[]
+                {
+                    new DnsResourceRecord(target, DnsResourceRecordType.CNAME, DnsClass.IN, 60,
+                        new DnsCNAMERecordData("unresolved.example.net"))
+                }));
+        var request = new DnsDatagram(1, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
+            DnsResponseCode.NoError, new[] { new DnsQuestionRecord("source.com", DnsResourceRecordType.A, DnsClass.IN) });
+
+        var response = await _app.ProcessRequestAsync(request, new IPEndPoint(IPAddress.Loopback, 1234),
+            DnsTransportProtocol.Udp, true);
+
+        Assert.That(response, Is.Null);
+    }
+
+    [Test]
     public async Task LoadCachedDomainsData_RebuildsTargetMembershipForGlobalAndOverrideAddresses()
     {
         _mockDnsServer.Setup(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()))
