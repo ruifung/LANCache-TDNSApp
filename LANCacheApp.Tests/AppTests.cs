@@ -218,7 +218,9 @@ public class AppTests
         });
         var question = new DnsQuestionRecord(target, DnsResourceRecordType.A, DnsClass.IN);
         _mockDnsServer.Invocations.Clear();
-        _mockDnsServer.Setup(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()))
+        var remoteEndpoint = new IPEndPoint(IPAddress.Loopback, 1234);
+        _mockDnsServer.Setup(s => s.DirectQueryAsync(It.IsAny<DnsDatagram>(), It.IsAny<IPEndPoint>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
                 DnsResponseCode.NoError, new[] { question }, new[]
                 {
@@ -227,18 +229,23 @@ public class AppTests
                 }));
         var request = new DnsDatagram(1, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
             DnsResponseCode.NoError, new[] { new DnsQuestionRecord("source.com", DnsResourceRecordType.A, DnsClass.IN) });
-        var response = await _app.ProcessRequestAsync(request, new IPEndPoint(IPAddress.Loopback, 1234),
-            DnsTransportProtocol.Udp, true);
+        var response = await _app.ProcessRequestAsync(request, remoteEndpoint, DnsTransportProtocol.Udp, true);
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Answer, Has.Count.EqualTo(resolves ? 2 : 1));
-        _mockDnsServer.Verify(s => s.ResolveAsync(It.Is<DnsQuestionRecord>(q => q.Name == target),
-            It.IsAny<CancellationToken>()), resolves ? Times.Once() : Times.Never());
+        _mockDnsServer.Verify(s => s.DirectQueryAsync(
+            It.Is<DnsDatagram>(r => r.Question.Single().Name == target),
+            It.Is<IPEndPoint>(ep => ep.Equals(remoteEndpoint)), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            resolves ? Times.Once() : Times.Never());
     }
 
     [Test]
     public async Task LoadCachedDomainsData_RebuildsTargetMembershipForGlobalAndOverrideAddresses()
     {
         _mockDnsServer.Setup(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
+                DnsResponseCode.NoError, Array.Empty<DnsQuestionRecord>()));
+        _mockDnsServer.Setup(s => s.DirectQueryAsync(It.IsAny<DnsDatagram>(), It.IsAny<IPEndPoint>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
                 DnsResponseCode.NoError, Array.Empty<DnsQuestionRecord>()));
         await InitializeApp(JsonSerializer.Serialize(new
@@ -268,8 +275,8 @@ public class AppTests
                 Assert.That(response!.Answer.Single().Type, Is.EqualTo(DnsResourceRecordType.CNAME));
                 Assert.That(response.Additional.Count, Is.EqualTo(blocked ? 2 : 1));
             }
-            _mockDnsServer.Verify(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()),
-                Times.Exactly(blocked ? 0 : 2));
+            _mockDnsServer.Verify(s => s.DirectQueryAsync(It.IsAny<DnsDatagram>(), It.IsAny<IPEndPoint>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Exactly(blocked ? 0 : 2));
         }
     }
 

@@ -131,7 +131,10 @@ public partial class App
                                 if (!cacheAddressIsInCachedDomains)
                                 {
                                     WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
-                                    var newResponse = await _dnsServer.ResolveAsync(newQuestion);
+                                    var targetRequest = new DnsDatagram(request.Identifier, false, request.OPCODE,
+                                        false, false, request.RecursionDesired, false, false, false,
+                                        DnsResponseCode.NoError, [newQuestion]);
+                                    var newResponse = await _dnsServer.DirectQueryAsync(targetRequest, remoteEp);
                                     if (newResponse.RCODE is DnsResponseCode.NoError)
                                         answers.AddRange(newResponse.Answer);
                                     else
