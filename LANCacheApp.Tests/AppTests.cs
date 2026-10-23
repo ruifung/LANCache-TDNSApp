@@ -52,6 +52,9 @@ public class AppTests
     {
         var field = typeof(App).GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
         field?.SetValue(_app, value);
+        if (fieldName is "_lanCacheDomains" or "_wildcardDomains")
+            typeof(App).GetMethod("PrepareCacheTargetDomains", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(_app, null);
     }
 
     private delegate bool DomainMatcher(Dictionary<string, string> direct, Dictionary<string, string> wildcard,
@@ -230,6 +233,44 @@ public class AppTests
         Assert.That(response!.Answer, Has.Count.EqualTo(resolves ? 2 : 1));
         _mockDnsServer.Verify(s => s.ResolveAsync(It.Is<DnsQuestionRecord>(q => q.Name == target),
             It.IsAny<CancellationToken>()), resolves ? Times.Once() : Times.Never());
+    }
+
+    [Test]
+    public async Task LoadCachedDomainsData_RebuildsTargetMembershipForGlobalAndOverrideAddresses()
+    {
+        _mockDnsServer.Setup(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
+                DnsResponseCode.NoError, Array.Empty<DnsQuestionRecord>()));
+        await InitializeApp(JsonSerializer.Serialize(new
+        {
+            lanCacheEnabled = true, domainsUpdatePeriodHours = 24,
+            globalCacheAddresses = new[] { "CACHE.EXAMPLE.NET" },
+            cacheAddresses = new Dictionary<string, string[]> { ["override"] = new[] { "other.example.net" } }
+        }));
+        var load = typeof(App).GetMethod("LoadCachedDomainsData", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        foreach (var rule in new[] { "wildcard", "none", "direct", "none" })
+        {
+            var blocked = rule != "none";
+            await File.WriteAllTextAsync(Path.Combine(_tempFolder, "cache_domains.json"),
+                rule == "direct"
+                    ? "{\"source.com\":\"global\",\"override.com\":\"override\",\"example.net\":\"global\"}"
+                    : "{\"source.com\":\"global\",\"override.com\":\"override\"}");
+            await File.WriteAllTextAsync(Path.Combine(_tempFolder, "wildcard_domains.json"),
+                rule == "wildcard" ? "{\"example.net\":\"global\"}" : "{}");
+            await (Task)load.Invoke(_app, null)!;
+            _mockDnsServer.Invocations.Clear();
+            foreach (var source in new[] { "source.com", "override.com" })
+            {
+                var request = new DnsDatagram(1, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
+                    DnsResponseCode.NoError, new[] { new DnsQuestionRecord(source, DnsResourceRecordType.A, DnsClass.IN) });
+                var response = await _app.ProcessRequestAsync(request, new IPEndPoint(IPAddress.Loopback, 1234),
+                    DnsTransportProtocol.Udp, true);
+                Assert.That(response!.Answer.Single().Type, Is.EqualTo(DnsResourceRecordType.CNAME));
+                Assert.That(response.Additional.Count, Is.EqualTo(blocked ? 2 : 1));
+            }
+            _mockDnsServer.Verify(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()),
+                Times.Exactly(blocked ? 0 : 2));
+        }
     }
 
     [Test]

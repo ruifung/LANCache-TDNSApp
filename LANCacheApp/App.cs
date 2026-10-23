@@ -39,6 +39,11 @@ namespace LanCache
         private AppConfig _config = null!;
         private Dictionary<string, string> _lanCacheDomains = new(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, string> _wildcardDomains = new(StringComparer.OrdinalIgnoreCase);
+        private sealed record DomainSnapshot(Dictionary<string, string> DirectDomains,
+            Dictionary<string, string> WildcardDomains, HashSet<string> CachedTargets);
+
+        private volatile DomainSnapshot _domainSnapshot = new(new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase));
         private DnsSOARecordData _soaRecord = null!;
         private DnsNSRecordData _nsRecord = null!;
         private string _cacheDomainsCacheFile = null!;
@@ -94,6 +99,27 @@ namespace LanCache
                     _dnsServer.WriteLog("Loaded cached wildcard domains.");
                 }
             }
+
+            PrepareCacheTargetDomains();
+        }
+
+        private void PrepareCacheTargetDomains()
+        {
+            var directDomains = _lanCacheDomains;
+            var wildcardDomains = _wildcardDomains;
+            var cachedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var address in _config.GlobalCacheAddresses
+                         .Concat(_config.CacheAddresses.Values.SelectMany(addresses => addresses))
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (address != DUMMY_LANCACHE_ADDRESS && !IPAddress.TryParse(address, out _) &&
+                    TryFindCacheDomain(directDomains, wildcardDomains, address, out _, out _))
+                {
+                    cachedTargets.Add(address);
+                }
+            }
+
+            _domainSnapshot = new DomainSnapshot(directDomains, wildcardDomains, cachedTargets);
         }
 
         private static readonly JsonSerializerOptions CacheDomainsIndexSerializerOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -204,6 +230,7 @@ namespace LanCache
 
                 _lanCacheDomains = newCacheDomains;
                 _wildcardDomains = wildcardDomains;
+                PrepareCacheTargetDomains();
                 _domainsLastUpdated = DateTime.Now;
                 _dnsServer.WriteLog("Updated cache domains.");
 
@@ -345,6 +372,7 @@ namespace LanCache
                 3600, 604800, 60);
             _nsRecord = new DnsNSRecordData(_dnsServer.ServerDomain);
             _config = await LoadOrInitializeConfig(dnsServer, config);
+            PrepareCacheTargetDomains();
             WriteDebugLog("Operating Mode: " + _config.OperatingMode);
             WriteDebugLog("Global Cache Addresses: " + string.Join(", ", _config.GlobalCacheAddresses));
             foreach (var cacheOverride in _config.CacheAddresses)

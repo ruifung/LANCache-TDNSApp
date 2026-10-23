@@ -25,7 +25,8 @@ public partial class App
         }
 
         var question = request.Question[0];
-        if (!TryFindCacheDomain(_lanCacheDomains, _wildcardDomains, question.Name, out var foundZone, out var cacheTarget) || cacheTarget == null)
+        var domains = _domainSnapshot;
+        if (!TryFindCacheDomain(domains.DirectDomains, domains.WildcardDomains, question.Name, out var foundZone, out var cacheTarget) || cacheTarget == null)
         {
             return null;
         }
@@ -126,7 +127,7 @@ public partial class App
                                     new DnsCNAMERecordData(cacheAddress)));
                                 var newQuestion = new DnsQuestionRecord(cacheAddress, question.Type, question.Class);
                             
-                                var cacheAddressIsInCachedDomains = TryFindCacheDomain(_lanCacheDomains, _wildcardDomains, cacheAddress, out _, out _);
+                                var cacheAddressIsInCachedDomains = domains.CachedTargets.Contains(cacheAddress);
                                 if (!cacheAddressIsInCachedDomains)
                                 {
                                     WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
