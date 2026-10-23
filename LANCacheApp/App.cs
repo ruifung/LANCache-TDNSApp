@@ -35,6 +35,7 @@ namespace LanCache
         private const string DUMMY_LANCACHE_ADDRESS = "lancache.example.com";
         private DateTime _domainsLastUpdated;
         private Timer? _domainsUpdateTimer;
+        private readonly SemaphoreSlim _domainsUpdateSemaphore = new(1, 1);
         private IDnsServer _dnsServer = null!;
         private AppConfig _config = null!;
         private ReadOnlyDictionary<string, string> _lanCacheDomains = new(new Dictionary<string, string>());
@@ -63,7 +64,7 @@ namespace LanCache
         {
             if (File.Exists(_cacheDomainsCacheFile))
             {
-                var cacheFile = File.OpenRead(_cacheDomainsCacheFile);
+                await using var cacheFile = File.OpenRead(_cacheDomainsCacheFile);
                 var parsed = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(cacheFile);
                 if (parsed != null)
                 {
@@ -74,7 +75,7 @@ namespace LanCache
 
             if (File.Exists(_wildcardDomainsCacheFile))
             {
-                var cacheFile = File.OpenRead(_wildcardDomainsCacheFile);
+                await using var cacheFile = File.OpenRead(_wildcardDomainsCacheFile);
                 var parsed = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(cacheFile);
                 if (parsed != null)
                 {
@@ -85,121 +86,134 @@ namespace LanCache
         }
 
         private static readonly JsonSerializerOptions CacheDomainsIndexSerializerOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        
+
         [SuppressMessage("ReSharper", "InvertIf")]
         private async Task UpdateLanCacheDomains()
         {
-            if (DateTime.Now.Subtract(_domainsLastUpdated) < TimeSpan.FromHours(_config.DomainsUpdatePeriodHours))
+            if (!await _domainsUpdateSemaphore.WaitAsync(0))
             {
-                _dnsServer.WriteLog("Update of cache domains skipped due to set interval.");
+                _dnsServer.WriteLog("Skipping cache domains update because another update is in progress.");
                 return;
             }
 
-            _dnsServer.WriteLog("Updating cache domains.");
-            var handler = new HttpClientNetworkHandler();
-            handler.Proxy = _dnsServer.Proxy;
-            handler.InnerHandler.AutomaticDecompression = DecompressionMethods.All;
-            handler.NetworkType = _dnsServer.IPv6Mode switch
-            {
-                IPv6Mode.Disabled => HttpClientNetworkType.IPv4Only,
-                IPv6Mode.Enabled => HttpClientNetworkType.Default,
-                IPv6Mode.Preferred => HttpClientNetworkType.PreferIPv6,
-                _ => HttpClientNetworkType.Default
-            };
-            handler.DnsClient = _dnsServer;
-            handler.EnableDANE = false;
-            using var hc = new HttpClient(handler);
-            var domainsZipFile = Path.Combine(_dnsServer.ApplicationFolder, "lancache-domains.zip");
             try
             {
-                var respStream = await hc.GetStreamAsync(_config.DomainsDataUrl);
-                await using (var fileStream = new FileStream($"{domainsZipFile}.download", FileMode.Create))
+                if (DateTime.Now.Subtract(_domainsLastUpdated) < TimeSpan.FromHours(_config.DomainsUpdatePeriodHours))
                 {
-                    await respStream.CopyToAsync(fileStream);
+                    _dnsServer.WriteLog("Update of cache domains skipped due to set interval.");
+                    return;
                 }
 
-                File.Move($"{domainsZipFile}.download", domainsZipFile, true);
-            }
-            catch (Exception ex)
-            {
-                _dnsServer.WriteLog("Failed to download domains zip file. Reusing previous.");
-                _dnsServer.WriteLog(ex.ToString());
-            }
-
-            if (!File.Exists(domainsZipFile))
-            {
-                _dnsServer.WriteLog("No existing domains zip file found. Attempting load of cached data.");
-                await LoadCachedDomainsData();
-                return;
-            }
-
-
-            await using var archive = await ZipFile.OpenReadAsync(domainsZipFile);
-            var domainsJsonEntry = archive.GetEntry($"{_config.DomainsDataPathPrefix}cache_domains.json");
-            if (domainsJsonEntry == null)
-            {
-                _dnsServer.WriteLog("cache_domains.json not found in domains zip file.");
-                _dnsServer.WriteLog("Entries in domains zip file:");
-                foreach (var zipArchiveEntry in archive.Entries)
+                _dnsServer.WriteLog("Updating cache domains.");
+                var handler = new HttpClientNetworkHandler();
+                handler.Proxy = _dnsServer.Proxy;
+                handler.InnerHandler.AutomaticDecompression = DecompressionMethods.All;
+                handler.NetworkType = _dnsServer.IPv6Mode switch
                 {
-                    _dnsServer.WriteLog("- " + zipArchiveEntry.FullName);
-                }
-
-                await LoadCachedDomainsData();
-                return;
-            }
-
-            await using var entryStream = await domainsJsonEntry.OpenAsync();
-            var cacheDomains = await JsonSerializer.DeserializeAsync<CacheDomainsIndex>(entryStream, CacheDomainsIndexSerializerOptions);
-            if (cacheDomains == null)
-            {
-                _dnsServer.WriteLog("Fail to parse cache_domains.json");
-                await LoadCachedDomainsData();
-                return;
-            }
-
-            var newCacheDomains = new Dictionary<string, string>();
-            var wildcardDomains = new Dictionary<string, string>();
-            foreach (var entry in cacheDomains.CacheDomains.Where(e => e.DomainFiles.Count > 0))
-            {
-                foreach (var zipEntry in entry.DomainFiles
-                             .Select(f => archive.GetEntry($"{_config.DomainsDataPathPrefix}{f}")).Where(s => s != null)
-                             .Select(s => s!))
+                    IPv6Mode.Disabled => HttpClientNetworkType.IPv4Only,
+                    IPv6Mode.Enabled => HttpClientNetworkType.Default,
+                    IPv6Mode.Preferred => HttpClientNetworkType.PreferIPv6,
+                    _ => HttpClientNetworkType.Default
+                };
+                handler.DnsClient = _dnsServer;
+                handler.EnableDANE = false;
+                using var hc = new HttpClient(handler);
+                var domainsZipFile = Path.Combine(_dnsServer.ApplicationFolder, "lancache-domains.zip");
+                try
                 {
-                    await using var stream = await zipEntry.OpenAsync();
-                    using var reader = new StreamReader(stream);
-                    while (await reader.ReadLineAsync() is { } line)
+                    var respStream = await hc.GetStreamAsync(_config.DomainsDataUrl);
+                    await using (var fileStream = new FileStream($"{domainsZipFile}.download", FileMode.Create))
                     {
-                        if (line.StartsWith("*."))
+                        await respStream.CopyToAsync(fileStream);
+                    }
+
+                    File.Move($"{domainsZipFile}.download", domainsZipFile, true);
+                }
+                catch (Exception ex)
+                {
+                    _dnsServer.WriteLog("Failed to download domains zip file. Reusing previous.");
+                    _dnsServer.WriteLog(ex.ToString());
+                }
+
+                if (!File.Exists(domainsZipFile))
+                {
+                    _dnsServer.WriteLog("No existing domains zip file found. Attempting load of cached data.");
+                    await LoadCachedDomainsData();
+                    return;
+                }
+
+
+                await using var archive = await ZipFile.OpenReadAsync(domainsZipFile);
+                var domainsJsonEntry = archive.GetEntry($"{_config.DomainsDataPathPrefix}cache_domains.json");
+                if (domainsJsonEntry == null)
+                {
+                    _dnsServer.WriteLog("cache_domains.json not found in domains zip file.");
+                    _dnsServer.WriteLog("Entries in domains zip file:");
+                    foreach (var zipArchiveEntry in archive.Entries)
+                    {
+                        _dnsServer.WriteLog("- " + zipArchiveEntry.FullName);
+                    }
+
+                    await LoadCachedDomainsData();
+                    return;
+                }
+
+                await using var entryStream = await domainsJsonEntry.OpenAsync();
+                var cacheDomains = await JsonSerializer.DeserializeAsync<CacheDomainsIndex>(entryStream, CacheDomainsIndexSerializerOptions);
+                if (cacheDomains == null)
+                {
+                    _dnsServer.WriteLog("Fail to parse cache_domains.json");
+                    await LoadCachedDomainsData();
+                    return;
+                }
+
+                var newCacheDomains = new Dictionary<string, string>();
+                var wildcardDomains = new Dictionary<string, string>();
+                foreach (var entry in cacheDomains.CacheDomains.Where(e => e.DomainFiles.Count > 0))
+                {
+                    foreach (var zipEntry in entry.DomainFiles
+                                 .Select(f => archive.GetEntry($"{_config.DomainsDataPathPrefix}{f}")).Where(s => s != null)
+                                 .Select(s => s!))
+                    {
+                        await using var stream = await zipEntry.OpenAsync();
+                        using var reader = new StreamReader(stream);
+                        while (await reader.ReadLineAsync() is { } line)
                         {
-                            wildcardDomains[line[2..]] = entry.Name;
-                        }
-                        else
-                        {
-                            newCacheDomains[line] = entry.Name;
+                            if (line.StartsWith("*."))
+                            {
+                                wildcardDomains[line[2..]] = entry.Name;
+                            }
+                            else
+                            {
+                                newCacheDomains[line] = entry.Name;
+                            }
                         }
                     }
                 }
+
+                _lanCacheDomains = new ReadOnlyDictionary<string, string>(newCacheDomains);
+                _wildcardDomains = new ReadOnlyDictionary<string, string>(wildcardDomains);
+                _domainsLastUpdated = DateTime.Now;
+                _dnsServer.WriteLog("Updated cache domains.");
+
+                await using var cacheDomainsFile =
+                    new FileStream(_cacheDomainsCacheFile, FileMode.Create);
+                await JsonSerializer.SerializeAsync(cacheDomainsFile, _lanCacheDomains);
+                await using var wildcardDomainsFile =
+                    new FileStream(_wildcardDomainsCacheFile, FileMode.Create);
+                await JsonSerializer.SerializeAsync(wildcardDomainsFile, _wildcardDomains);
             }
-
-            _lanCacheDomains = new ReadOnlyDictionary<string, string>(newCacheDomains);
-            _wildcardDomains = new ReadOnlyDictionary<string, string>(wildcardDomains);
-            _domainsLastUpdated = DateTime.Now;
-            _dnsServer.WriteLog("Updated cache domains.");
-
-            await using var cacheDomainsFile =
-                new FileStream(_cacheDomainsCacheFile, FileMode.Create);
-            await JsonSerializer.SerializeAsync(cacheDomainsFile, _lanCacheDomains);
-            await using var wildcardDomainsFile =
-                new FileStream(_wildcardDomainsCacheFile, FileMode.Create);
-            await JsonSerializer.SerializeAsync(wildcardDomainsFile, _wildcardDomains);
+            finally
+            {
+                _domainsUpdateSemaphore.Release();
+            }
         }
 
         private static readonly JsonSerializerOptions ConfigJsonSerializerOptions = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true
-        }; 
+        };
 
         private static async Task<AppConfig> LoadOrInitializeConfig(IDnsServer dnsServer, string? config)
         {
@@ -233,7 +247,7 @@ namespace LanCache
                 };
                 var configFilePath = Path.Combine(dnsServer.ApplicationFolder, "dnsApp.config");
                 await using var configFileStream = new FileStream(configFilePath, FileMode.Create);
-                await JsonSerializer.SerializeAsync(configFileStream, appConfig,ConfigJsonSerializerOptions);
+                await JsonSerializer.SerializeAsync(configFileStream, appConfig, ConfigJsonSerializerOptions);
                 return appConfig;
             }
         }
@@ -371,7 +385,7 @@ namespace LanCache
             cacheTarget = null;
             return false;
         }
-        
+
         private static bool IsZoneFound(IReadOnlyDictionary<string, string> domains, string domain,
             out string? foundZone, out string? cacheTarget)
         {
