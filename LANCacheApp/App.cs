@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
@@ -38,8 +37,8 @@ namespace LanCache
         private readonly SemaphoreSlim _domainsUpdateSemaphore = new(1, 1);
         private IDnsServer _dnsServer = null!;
         private AppConfig _config = null!;
-        private ReadOnlyDictionary<string, string> _lanCacheDomains = new(new Dictionary<string, string>());
-        private ReadOnlyDictionary<string, string> _wildcardDomains = new(new Dictionary<string, string>());
+        private Dictionary<string, string> _lanCacheDomains = new(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, string> _wildcardDomains = new(StringComparer.OrdinalIgnoreCase);
         private DnsSOARecordData _soaRecord = null!;
         private DnsNSRecordData _nsRecord = null!;
         private string _cacheDomainsCacheFile = null!;
@@ -68,7 +67,13 @@ namespace LanCache
                 var parsed = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(cacheFile);
                 if (parsed != null)
                 {
-                    _lanCacheDomains = new ReadOnlyDictionary<string, string>(parsed);
+                    var domains = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var entry in parsed)
+                    {
+                        domains[entry.Key] = entry.Value;
+                    }
+
+                    _lanCacheDomains = domains;
                     _dnsServer.WriteLog("Loaded cached direct domains.");
                 }
             }
@@ -79,7 +84,13 @@ namespace LanCache
                 var parsed = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(cacheFile);
                 if (parsed != null)
                 {
-                    _wildcardDomains = new ReadOnlyDictionary<string, string>(parsed);
+                    var domains = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var entry in parsed)
+                    {
+                        domains[entry.Key] = entry.Value;
+                    }
+
+                    _wildcardDomains = domains;
                     _dnsServer.WriteLog("Loaded cached wildcard domains.");
                 }
             }
@@ -167,8 +178,8 @@ namespace LanCache
                     return;
                 }
 
-                var newCacheDomains = new Dictionary<string, string>();
-                var wildcardDomains = new Dictionary<string, string>();
+                var newCacheDomains = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var wildcardDomains = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var entry in cacheDomains.CacheDomains.Where(e => e.DomainFiles.Count > 0))
                 {
                     foreach (var zipEntry in entry.DomainFiles
@@ -191,8 +202,8 @@ namespace LanCache
                     }
                 }
 
-                _lanCacheDomains = new ReadOnlyDictionary<string, string>(newCacheDomains);
-                _wildcardDomains = new ReadOnlyDictionary<string, string>(wildcardDomains);
+                _lanCacheDomains = newCacheDomains;
+                _wildcardDomains = wildcardDomains;
                 _domainsLastUpdated = DateTime.Now;
                 _dnsServer.WriteLog("Updated cache domains.");
 
@@ -353,58 +364,41 @@ namespace LanCache
             return Task.FromResult(false);
         }
 
-        private static string? GetParentZone(string domain)
-        {
-            var i = domain.IndexOf('.');
-            //dont return root zone
-            return i > -1 ? domain[(i + 1)..] : null;
-        }
-
-        private static bool IsZoneFound(IReadOnlyDictionary<string, string> domains, string domain)
-        {
-            return IsZoneFound(domains, domain, out _, out _);
-        }
-
-        private static bool IsWildcardZoneFound(IReadOnlyDictionary<string, string> domains, string domain,
+        private static bool TryFindCacheDomain(Dictionary<string, string> directDomains,
+            Dictionary<string, string> wildcardDomains, string domain,
             out string? foundZone, out string? cacheTarget)
         {
-            var currentDomain = GetParentZone(domain.ToLower());
-            while (currentDomain is not null)
+            var directLookup = directDomains.GetAlternateLookup<ReadOnlySpan<char>>();
+            var wildcardLookup = wildcardDomains.GetAlternateLookup<ReadOnlySpan<char>>();
+            var suffix = domain.AsSpan();
+            foundZone = null;
+            cacheTarget = null;
+            if (directLookup.TryGetValue(suffix, out var directZone, out var directTarget))
             {
-                if (domains.TryGetValue(currentDomain, out var value))
-                {
-                    foundZone = currentDomain;
-                    cacheTarget = value;
-                    return true;
-                }
-
-                currentDomain = GetParentZone(currentDomain);
+                foundZone = directZone;
+                cacheTarget = directTarget;
+                return true;
             }
 
-            foundZone = null;
-            cacheTarget = null;
-            return false;
-        }
-
-        private static bool IsZoneFound(IReadOnlyDictionary<string, string> domains, string domain,
-            out string? foundZone, out string? cacheTarget)
-        {
-            var currentDomain = domain.ToLower();
-            do
+            int dot;
+            while ((dot = suffix.IndexOf('.')) >= 0)
             {
-                if (domains.TryGetValue(currentDomain, out var value))
+                suffix = suffix[(dot + 1)..];
+                if (directLookup.TryGetValue(suffix, out directZone, out directTarget))
                 {
-                    foundZone = currentDomain;
-                    cacheTarget = value;
+                    foundZone = directZone;
+                    cacheTarget = directTarget;
                     return true;
                 }
 
-                currentDomain = GetParentZone(currentDomain);
-            } while (currentDomain is not null);
+                if (foundZone is null && wildcardLookup.TryGetValue(suffix, out var wildcardZone, out var wildcardTarget))
+                {
+                    foundZone = wildcardZone;
+                    cacheTarget = wildcardTarget;
+                }
+            }
 
-            foundZone = null;
-            cacheTarget = null;
-            return false;
+            return foundZone is not null;
         }
 
         public void Dispose()

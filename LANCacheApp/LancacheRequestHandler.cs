@@ -25,11 +25,7 @@ public partial class App
         }
 
         var question = request.Question[0];
-        var foundDirect = IsZoneFound(_lanCacheDomains, question.Name, out var foundZone, out var cacheTarget);
-        // Use short-circuiting to skip the wildcard search if it matches a direct domain.
-        var foundWild = !foundDirect && IsWildcardZoneFound(_wildcardDomains, question.Name, out foundZone, out cacheTarget);
-
-        if ((!foundDirect && !foundWild) || cacheTarget == null)
+        if (!TryFindCacheDomain(_lanCacheDomains, _wildcardDomains, question.Name, out var foundZone, out var cacheTarget) || cacheTarget == null)
         {
             return null;
         }
@@ -130,7 +126,7 @@ public partial class App
                                     new DnsCNAMERecordData(cacheAddress)));
                                 var newQuestion = new DnsQuestionRecord(cacheAddress, question.Type, question.Class);
                             
-                                var cacheAddressIsInCachedDomains = IsZoneFound(_lanCacheDomains, cacheAddress) || IsZoneFound(_wildcardDomains, cacheAddress);
+                                var cacheAddressIsInCachedDomains = TryFindCacheDomain(_lanCacheDomains, _wildcardDomains, cacheAddress, out _, out _);
                                 if (!cacheAddressIsInCachedDomains)
                                 {
                                     WriteDebugLog($"Querying for {question.Type} records for cache server {cacheAddress}");
