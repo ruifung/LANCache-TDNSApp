@@ -27,7 +27,7 @@ public partial class App
         var question = request.Question[0];
         var foundDirect = IsZoneFound(_lanCacheDomains, question.Name, out var foundZone, out var cacheTarget);
         // Use short-circuiting to skip the wildcard search if it matches a direct domain.
-        var foundWild = !foundDirect && IsZoneFound(_wildcardDomains, question.Name, out foundZone, out cacheTarget);
+        var foundWild = !foundDirect && IsWildcardZoneFound(_wildcardDomains, question.Name, out foundZone, out cacheTarget);
 
         if ((!foundDirect && !foundWild) || cacheTarget == null)
         {

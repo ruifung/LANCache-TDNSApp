@@ -146,6 +146,44 @@ public class AppTests
     }
 
     [Test]
+    public async Task ProcessRequestAsync_WithWildcardMatch_DoesNotMatchApexButMatchesSubdomains()
+    {
+        var config = new
+        {
+            lanCacheEnabled = true,
+            operatingMode = "Authoritative",
+            globalCacheAddresses = new[] { "192.168.1.10" }
+        };
+        await InitializeApp(JsonSerializer.Serialize(config));
+
+        var wildcardDomains = new Dictionary<string, string> { { "example.com", "steam" } };
+        SetPrivateField("_wildcardDomains", new ReadOnlyDictionary<string, string>(wildcardDomains));
+
+        async Task<DnsDatagram?> Process(string domain)
+        {
+            var request = new DnsDatagram(1234, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
+                DnsResponseCode.NoError,
+                new[] { new DnsQuestionRecord(domain, DnsResourceRecordType.A, DnsClass.IN) }, null, null, null);
+
+            return await _app.ProcessRequestAsync(request, new IPEndPoint(IPAddress.Parse("127.0.0.1"), 1234),
+                DnsTransportProtocol.Udp, true);
+        }
+
+        Assert.That(await Process("example.com"), Is.Null);
+
+        foreach (var domain in new[] { "a.example.com", "a.b.example.com" })
+        {
+            var response = await Process(domain);
+
+            Assert.That(response, Is.Not.Null, domain);
+            Assert.That(response!.Answer, Has.Count.EqualTo(1), domain);
+            var aRecord = response.Answer[0].RDATA as DnsARecordData;
+            Assert.That(aRecord, Is.Not.Null, domain);
+            Assert.That(aRecord!.Address, Is.EqualTo(IPAddress.Parse("192.168.1.10")), domain);
+        }
+    }
+
+    [Test]
     public async Task ProcessRequestAsync_WhenDomainNotCached_ReturnsNull()
     {
         var config = new

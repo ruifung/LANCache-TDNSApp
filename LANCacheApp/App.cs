@@ -350,6 +350,27 @@ namespace LanCache
         {
             return IsZoneFound(domains, domain, out _, out _);
         }
+
+        private static bool IsWildcardZoneFound(IReadOnlyDictionary<string, string> domains, string domain,
+            out string? foundZone, out string? cacheTarget)
+        {
+            var currentDomain = GetParentZone(domain.ToLower());
+            while (currentDomain is not null)
+            {
+                if (domains.TryGetValue(currentDomain, out var value))
+                {
+                    foundZone = currentDomain;
+                    cacheTarget = value;
+                    return true;
+                }
+
+                currentDomain = GetParentZone(currentDomain);
+            }
+
+            foundZone = null;
+            cacheTarget = null;
+            return false;
+        }
         
         private static bool IsZoneFound(IReadOnlyDictionary<string, string> domains, string domain,
             out string? foundZone, out string? cacheTarget)
