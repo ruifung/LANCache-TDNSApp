@@ -633,6 +633,36 @@ public class AppTests
         Assert.That(aRecord!.Address, Is.EqualTo(IPAddress.Parse("192.168.1.20")));
     }
 
+    [TestCase(DnsResourceRecordType.AAAA, "192.168.1.10")]
+    [TestCase(DnsResourceRecordType.A, "2001:db8::10")]
+    [TestCase(DnsResourceRecordType.HTTPS, "192.168.1.10")]
+    public async Task ProcessRequestAsync_CachedDomainWithoutRecordsOfRequestedType_ReturnsNoDataNotNxDomain(
+        DnsResourceRecordType queryType, string cacheAddress)
+    {
+        await InitializeApp(JsonSerializer.Serialize(new
+        {
+            lanCacheEnabled = true,
+            operatingMode = "Authoritative",
+            globalCacheAddresses = new[] { cacheAddress }
+        }));
+        SetPrivateField("_lanCacheDomains", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["content1.steampowered.com"] = "steam"
+        });
+
+        var request = new DnsDatagram(1234, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
+            DnsResponseCode.NoError,
+            new[] { new DnsQuestionRecord("content1.steampowered.com", queryType, DnsClass.IN) }, null, null, null);
+
+        var response = await _app.ProcessRequestAsync(request, new IPEndPoint(IPAddress.Parse("127.0.0.1"), 1234),
+            DnsTransportProtocol.Udp, true);
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.RCODE, Is.EqualTo(DnsResponseCode.NoError));
+        Assert.That(response.Answer, Is.Empty);
+        Assert.That(response.Authority.Single().Type, Is.EqualTo(DnsResourceRecordType.SOA));
+    }
+
     [Test]
     public async Task ProcessRequestAsync_InBlockingMode_InterceptsAndReturnsNoError()
     {

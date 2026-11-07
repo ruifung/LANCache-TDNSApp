@@ -186,7 +186,16 @@ public partial class App
             return null;
         }
 
-        // Return NXDomain for intercepted cache domains.
+        // The name is served by a configured cache target but has no records of the requested type (e.g. AAAA with
+        // IPv4-only targets). Answer NODATA, since NXDOMAIN would tell resolvers the whole name does not exist.
+        if (cacheAddresses.Any(t => t != DUMMY_LANCACHE_ADDRESS))
+        {
+            WriteDebugLog("Returning DNSDatagram with NODATA response");
+            return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
+                request.RecursionDesired, true, false, false, DnsResponseCode.NoError, request.Question, null, authority);
+        }
+
+        // Return NXDomain for intercepted cache domains with no usable cache targets.
         // This aligns with the official lancache-dns as that configures a zone per cached domain, which would effectively result in this.
         WriteDebugLog("Returning DNSDatagram with NXDOMAIN response");
         return new DnsDatagram(request.Identifier, true, request.OPCODE, true, false,
