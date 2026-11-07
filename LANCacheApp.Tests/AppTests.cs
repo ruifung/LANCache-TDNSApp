@@ -633,6 +633,44 @@ public class AppTests
         Assert.That(aRecord!.Address, Is.EqualTo(IPAddress.Parse("192.168.1.20")));
     }
 
+    [TestCase("a.example.net", "b.example.net")]
+    [TestCase("a.example.net", "10.9.9.9")]
+    public async Task ProcessRequestAsync_MultipleOrMixedTargets_DoesNotReturnCnameAlongsideOtherRecords(string first, string second)
+    {
+        _mockDnsServer.Setup(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
+                DnsResponseCode.NoError, Array.Empty<DnsQuestionRecord>()));
+        await InitializeApp(JsonSerializer.Serialize(new { lanCacheEnabled = true, globalCacheAddresses = new[] { first, second } }));
+        SetPrivateField("_lanCacheDomains", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["source.com"] = "steam"
+        });
+        _mockDnsServer.Setup(s => s.DirectQueryAsync(It.IsAny<DnsDatagram>(), It.IsAny<IPEndPoint>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DnsDatagram d, IPEndPoint _, int _, CancellationToken _) =>
+            {
+                var name = d.Question[0].Name;
+                var ip = name.StartsWith("a.") ? "1.1.1.1" : "2.2.2.2";
+                return new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
+                    DnsResponseCode.NoError, d.Question, new[]
+                    {
+                        new DnsResourceRecord(name, DnsResourceRecordType.A, DnsClass.IN, 60,
+                            new DnsARecordData(IPAddress.Parse(ip)))
+                    });
+            });
+        var request = new DnsDatagram(1, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
+            DnsResponseCode.NoError, new[] { new DnsQuestionRecord("source.com", DnsResourceRecordType.A, DnsClass.IN) });
+
+        var response = await _app.ProcessRequestAsync(request, new IPEndPoint(IPAddress.Loopback, 1234),
+            DnsTransportProtocol.Udp, true);
+
+        Assert.That(response!.Answer.Select(a => a.Type), Is.All.EqualTo(DnsResourceRecordType.A));
+        Assert.That(response.Answer.Select(a => a.Name), Is.All.EqualTo("source.com"));
+        var addresses = response.Answer.Select(a => ((DnsARecordData)a.RDATA).Address.ToString()).ToList();
+        Assert.That(addresses, Has.Count.EqualTo(2));
+        Assert.That(addresses, Does.Contain("1.1.1.1"));
+    }
+
     [Test]
     public async Task ProcessRequestAsync_InBlockingMode_InterceptsAndReturnsNoError()
     {

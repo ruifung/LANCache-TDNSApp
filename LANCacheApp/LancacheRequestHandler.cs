@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -82,7 +83,11 @@ public partial class App
                 break;
             default:
             {
-                foreach (var cacheAddress in cacheAddresses.Where(t => t != DUMMY_LANCACHE_ADDRESS))
+                var usableTargets = cacheAddresses.Where(t => t != DUMMY_LANCACHE_ADDRESS).ToList();
+                // A CNAME cannot coexist with other records or another CNAME at the same name, so it is only used
+                // when there is exactly one target and it is a hostname. Otherwise hostname targets are flattened.
+                var useCname = usableTargets.Count == 1 && !IPAddress.TryParse(usableTargets[0], out _);
+                foreach (var cacheAddress in usableTargets)
                 {
                     var isIpAddress = IPAddress.TryParse(cacheAddress, out var ipAddress);
                     if (isIpAddress)
@@ -111,6 +116,49 @@ public partial class App
                             default:
                                 _dnsServer.WriteLog("Found non v4/v6 IP address somehow: " + cacheAddress);
                                 break;
+                        }
+                    }
+                    else if (!useCname)
+                    {
+                        if (cacheAddress == question.Name)
+                        {
+                            _dnsServer.WriteLog($"Attempted to cache {cacheAddress} using itself!");
+                        }
+                        else if (question.Type is DnsResourceRecordType.A or DnsResourceRecordType.AAAA)
+                        {
+                            if (domains.CachedTargets.Contains(cacheAddress))
+                            {
+                                WriteDebugLog("Cache address is present in cached domains, skipping resolution.");
+                                additional.Add(new DnsResourceRecord(question.Name, DnsResourceRecordType.TXT, question.Class, 60,
+                                    new DnsTXTRecordData("source=lancache-app; warning=cache-address-is-cached-domain")));
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    WriteDebugLog($"Flattening {question.Type} records for cache server {cacheAddress}");
+                                    var targetRequest = new DnsDatagram(request.Identifier, false, request.OPCODE,
+                                        false, false, request.RecursionDesired, false, false, false,
+                                        DnsResponseCode.NoError,
+                                        [new DnsQuestionRecord(cacheAddress, question.Type, question.Class)]);
+                                    var targetResponse = await _dnsServer.DirectQueryAsync(targetRequest, remoteEp);
+                                    if (targetResponse.RCODE is DnsResponseCode.NoError)
+                                    {
+                                        answers.AddRange(targetResponse.Answer
+                                            .Where(a => a.Type == question.Type)
+                                            .Select(a => new DnsResourceRecord(question.Name, a.Type, a.Class, a.TTL, a.RDATA)));
+                                    }
+                                    else
+                                    {
+                                        _dnsServer.WriteLog(
+                                            $"Error querying cache target {cacheAddress} for QTYPE {question.Type} with RCODE {targetResponse.RCODE}");
+                                    }
+                                }
+                                catch (Exception ex) when (ex is not OperationCanceledException)
+                                {
+                                    _dnsServer.WriteLog($"Failed to resolve cache target {cacheAddress}: {ex.Message}");
+                                }
+                            }
                         }
                     }
                     else
