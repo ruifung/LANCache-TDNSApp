@@ -633,6 +633,37 @@ public class AppTests
         Assert.That(aRecord!.Address, Is.EqualTo(IPAddress.Parse("192.168.1.20")));
     }
 
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public async Task ProcessRequestAsync_TargetLookupTimeout_DoesNotThrow(bool fallback, bool expectResponse)
+    {
+        _mockDnsServer.Setup(s => s.ResolveAsync(It.IsAny<DnsQuestionRecord>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DnsDatagram(0, true, DnsOpcode.StandardQuery, false, false, true, true, false, false,
+                DnsResponseCode.NoError, Array.Empty<DnsQuestionRecord>()));
+        await InitializeApp(JsonSerializer.Serialize(new
+        {
+            lanCacheEnabled = true, globalCacheAddresses = new[] { "cache.example.net" },
+            fallbackOnCnameTargetNoAnswer = fallback
+        }));
+        SetPrivateField("_lanCacheDomains", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["source.com"] = "steam"
+        });
+        _mockDnsServer.Setup(s => s.DirectQueryAsync(It.IsAny<DnsDatagram>(), It.IsAny<IPEndPoint>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+        var request = new DnsDatagram(1, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
+            DnsResponseCode.NoError, new[] { new DnsQuestionRecord("source.com", DnsResourceRecordType.A, DnsClass.IN) });
+
+        var response = await _app.ProcessRequestAsync(request, new IPEndPoint(IPAddress.Loopback, 1234),
+            DnsTransportProtocol.Udp, true);
+
+        if (expectResponse)
+            Assert.That(response!.Answer.Single().Type, Is.EqualTo(DnsResourceRecordType.CNAME));
+        else
+            Assert.That(response, Is.Null);
+    }
+
     [Test]
     public async Task ProcessRequestAsync_InBlockingMode_InterceptsAndReturnsNoError()
     {

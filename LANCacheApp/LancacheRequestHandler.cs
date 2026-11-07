@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -148,9 +149,10 @@ public partial class App
                                         new DnsTXTRecordData("source=lancache-app; warning=cache-address-is-cached-domain")));
                                 }
                             }
-                            catch (DnsClientException)
+                            catch (Exception ex) when (ex is not OperationCanceledException)
                             {
-                                _dnsServer.WriteLog("Invalid CNAME target: " + cacheAddress);
+                                // DirectQueryAsync reports its 4s timeout as TimeoutException, not DnsClientException.
+                                _dnsServer.WriteLog($"Failed to resolve CNAME target {cacheAddress}: {ex.Message}");
                             }
                     }
                 }
