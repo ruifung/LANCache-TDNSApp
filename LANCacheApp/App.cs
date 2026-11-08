@@ -214,8 +214,14 @@ namespace LanCache
                     {
                         await using var stream = await zipEntry.OpenAsync();
                         using var reader = new StreamReader(stream);
-                        while (await reader.ReadLineAsync() is { } line)
+                        while (await reader.ReadLineAsync() is { } rawLine)
                         {
+                            var line = rawLine.Trim();
+                            if (line.Length == 0 || line[0] == '#')
+                            {
+                                continue;
+                            }
+
                             if (line.StartsWith("*."))
                             {
                                 wildcardDomains[line[2..]] = entry.Name;

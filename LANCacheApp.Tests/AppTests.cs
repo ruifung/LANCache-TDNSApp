@@ -434,6 +434,45 @@ public class AppTests
     }
 
     [Test]
+    public async Task UpdateLanCacheDomains_IgnoresCommentsAndBlankLinesInDomainFiles()
+    {
+        await InitializeApp(JsonSerializer.Serialize(new
+        {
+            lanCacheEnabled = true, domainsDataUrl = "invalid://cache-domains", domainsDataPathPrefix = "test/",
+            domainsUpdatePeriodHours = 24, globalCacheAddresses = new[] { "192.168.1.10" }
+        }));
+        using (var archive = ZipFile.Open(Path.Combine(_tempFolder, "lancache-domains.zip"), ZipArchiveMode.Create))
+        {
+            using (var writer = new StreamWriter(archive.CreateEntry("test/cache_domains.json").Open()))
+            {
+                await writer.WriteAsync("{\"cache_domains\":[{\"name\":\"nintendo\",\"domain_files\":[\"nintendo.txt\"]}]}");
+            }
+
+            using (var writer = new StreamWriter(archive.CreateEntry("test/nintendo.txt").Open()))
+            {
+                await writer.WriteAsync("# Nintendo Switch 2\r\n*.hac.example.com\r\n\r\n  # Switch\r\nshop.example.com  \r\n");
+            }
+        }
+
+        SetPrivateField("_domainsLastUpdated", DateTime.MinValue);
+        var update = typeof(App).GetMethod("UpdateLanCacheDomains", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await (Task)update.Invoke(_app, null)!;
+
+        var direct = (Dictionary<string, string>)typeof(App)
+            .GetField("_lanCacheDomains", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_app)!;
+        var wildcard = (Dictionary<string, string>)typeof(App)
+            .GetField("_wildcardDomains", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_app)!;
+        Assert.That(direct.Keys, Is.EquivalentTo(new[] { "shop.example.com" }));
+        Assert.That(wildcard.Keys, Is.EquivalentTo(new[] { "hac.example.com" }));
+
+        // A query for the root (empty name) must not be treated as a cached domain.
+        var rootQuery = new DnsDatagram(1, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
+            DnsResponseCode.NoError, new[] { new DnsQuestionRecord("", DnsResourceRecordType.NS, DnsClass.IN) });
+        Assert.That(await _app.ProcessRequestAsync(rootQuery, new IPEndPoint(IPAddress.Loopback, 1234),
+            DnsTransportProtocol.Udp, true), Is.Null);
+    }
+
+    [Test]
     public async Task ProcessRequestAsync_WhenDisabled_ReturnsNull()
     {
         var config = new
