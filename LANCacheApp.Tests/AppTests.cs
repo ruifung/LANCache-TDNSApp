@@ -732,6 +732,56 @@ public class AppTests
     }
 
     [Test]
+    public async Task ProcessRequestAsync_FromIpv4MappedIpv6Client_MatchesPlainIpv4IgnoreEntry()
+    {
+        var config = new
+        {
+            lanCacheEnabled = true,
+            operatingMode = "Authoritative",
+            globalCacheAddresses = new[] { "192.168.1.10" },
+            ignoreClientAddresses = new[] { "10.0.0.5" }
+        };
+        await InitializeApp(JsonSerializer.Serialize(config));
+
+        SetPrivateField("_lanCacheDomains", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["content1.steampowered.com"] = "steam"
+        });
+
+        var request = new DnsDatagram(1234, false, DnsOpcode.StandardQuery, false, false, true, false, false, false, DnsResponseCode.NoError,
+            new[] { new DnsQuestionRecord("content1.steampowered.com", DnsResourceRecordType.A, DnsClass.IN) }, null, null, null);
+
+        var response = await _app.ProcessRequestAsync(request,
+            new IPEndPoint(IPAddress.Parse("10.0.0.5").MapToIPv6(), 1234), DnsTransportProtocol.Udp, true);
+
+        Assert.That(response, Is.Null);
+    }
+
+    [Test]
+    public async Task ProcessRequestAsync_FromInternalZeroAddress_IsAlwaysIgnoredEvenWithoutConfiguredEntry()
+    {
+        // Technitium stamps internally-generated queries (e.g. recursion re-entering this app) with source 0.0.0.0.
+        var config = new
+        {
+            lanCacheEnabled = true,
+            operatingMode = "Authoritative",
+            globalCacheAddresses = new[] { "192.168.1.10" },
+            ignoreClientAddresses = Array.Empty<string>()
+        };
+        await InitializeApp(JsonSerializer.Serialize(config));
+
+        var domains = new Dictionary<string, string> { { "content1.steampowered.com", "steam" } };
+        SetPrivateField("_lanCacheDomains", new Dictionary<string, string>(domains, StringComparer.OrdinalIgnoreCase));
+
+        var request = new DnsDatagram(1234, false, DnsOpcode.StandardQuery, false, false, true, false, false, false, DnsResponseCode.NoError,
+            new[] { new DnsQuestionRecord("content1.steampowered.com", DnsResourceRecordType.A, DnsClass.IN) }, null, null, null);
+
+        var response = await _app.ProcessRequestAsync(request, new IPEndPoint(IPAddress.Any, 1234), DnsTransportProtocol.Udp, true);
+
+        Assert.That(response, Is.Null);
+    }
+
+    [Test]
     public async Task ProcessRequestAsync_InBlockingMode_InterceptsAndReturnsNoError()
     {
         var config = new

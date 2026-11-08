@@ -19,8 +19,13 @@ public partial class App
 {
     private async Task<DnsDatagram?> HandleLancacheRequest(DnsDatagram request, IPEndPoint remoteEp, OperatingMode mode)
     {
-        if (!_config.LanCacheEnabled || mode != _config.OperatingMode ||
-            _ignoredClientNetworkAddresses.Any(netAddr => netAddr.Contains(remoteEp.Address)))
+        // Normalize IPv4-mapped-IPv6 addresses (::ffff:a.b.c.d) so a plain-IPv4 ignoreClientAddresses entry still matches.
+        var clientAddress = remoteEp.Address.IsIPv4MappedToIPv6 ? remoteEp.Address.MapToIPv4() : remoteEp.Address;
+        var isIgnoredClient = _ignoredClientNetworkAddresses.Any(netAddr => netAddr.Contains(clientAddress));
+        WriteDebugLog(
+            $"Client check for {request.Question[0].Name}: raw={remoteEp.Address} ({remoteEp.Address.AddressFamily}), normalized={clientAddress}, ignored={isIgnoredClient}");
+
+        if (!_config.LanCacheEnabled || mode != _config.OperatingMode || isIgnoredClient)
         {
             return null;
         }

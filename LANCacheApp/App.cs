@@ -357,6 +357,10 @@ namespace LanCache
                 }
             }
 
+            // Technitium's own internally-generated queries (e.g. recursion re-entering this app) use 0.0.0.0/::, not the real client's address.
+            addrSet.Add(new NetworkAddress(IPAddress.Any, 32));
+            addrSet.Add(new NetworkAddress(IPAddress.IPv6Any, 128));
+
             _ignoredClientNetworkAddresses = addrSet;
         }
 
