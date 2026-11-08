@@ -673,6 +673,34 @@ public class AppTests
     }
 
     [Test]
+    public async Task ProcessRequestAsync_CacheNamesInConfigAreMatchedCaseInsensitively()
+    {
+        await InitializeApp(JsonSerializer.Serialize(new
+        {
+            lanCacheEnabled = true,
+            globalCacheAddresses = new[] { "192.168.1.10" },
+            cacheAddresses = new Dictionary<string, string[]> { ["Steam"] = new[] { "192.168.1.20" } },
+            enabledCaches = new[] { "STEAM", "Epic" },
+            disabledCaches = new[] { "Epic" }
+        }));
+        SetPrivateField("_lanCacheDomains", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["steam.com"] = "steam",
+            ["epic.com"] = "epic"
+        });
+
+        async Task<DnsDatagram?> Query(string name) => await _app.ProcessRequestAsync(
+            new DnsDatagram(1, false, DnsOpcode.StandardQuery, false, false, true, false, false, false,
+                DnsResponseCode.NoError, new[] { new DnsQuestionRecord(name, DnsResourceRecordType.A, DnsClass.IN) }),
+            new IPEndPoint(IPAddress.Loopback, 1234), DnsTransportProtocol.Udp, true);
+
+        var steam = await Query("steam.com");
+        Assert.That(steam, Is.Not.Null);
+        Assert.That(((DnsARecordData)steam!.Answer.Single().RDATA).Address, Is.EqualTo(IPAddress.Parse("192.168.1.20")));
+        Assert.That(await Query("epic.com"), Is.Null);
+    }
+
+    [Test]
     public async Task ProcessRequestAsync_InBlockingMode_InterceptsAndReturnsNoError()
     {
         var config = new

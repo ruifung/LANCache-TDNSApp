@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -32,20 +33,21 @@ public partial class App
         }
 
         // Skip processing if the enabled cache whitelist is set, and the cache isn't enabled.
-        if (_config.EnabledCaches.Count > 0 && !_config.EnabledCaches.Contains(cacheTarget))
+        if (_config.EnabledCaches.Count > 0 && !_config.EnabledCaches.Contains(cacheTarget, StringComparer.OrdinalIgnoreCase))
         {
             return null;
         }
 
         // Skip processing if the disabled cache blacklist is set, and the cache is disabled.
-        if (_config.DisabledCaches.Count > 0 && _config.DisabledCaches.Contains(cacheTarget))
+        if (_config.DisabledCaches.Count > 0 && _config.DisabledCaches.Contains(cacheTarget, StringComparer.OrdinalIgnoreCase))
         {
             return null;
         }
 
         WriteDebugLog("Resolving cache addresses for cache: " + cacheTarget);
-        var hasOverride = _config.CacheAddresses.TryGetValue(cacheTarget, out var cacheAddresses);
-        if (!hasOverride || cacheAddresses == null)
+        var cacheAddresses = _config.CacheAddresses
+            .FirstOrDefault(kv => string.Equals(kv.Key, cacheTarget, StringComparison.OrdinalIgnoreCase)).Value;
+        if (cacheAddresses == null)
         {
             cacheAddresses = _config.GlobalCacheAddresses;
         }
